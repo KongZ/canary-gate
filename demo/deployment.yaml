@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+  namespace: demo
+spec:
+  selector:
+    matchLabels:
+      app: demo
+  template:
+    metadata:
+      labels:
+        app: demo
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: demo
+          image: ghcr.io/kongz/piggy-demo:latest
+          resources:
+            limits:
+              memory: "64Mi"
+              cpu: "200m"
+          ports:
+           - containerPort: 8080
