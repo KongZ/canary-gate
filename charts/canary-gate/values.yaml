@@ -5,12 +5,13 @@
 replicaCount: 1
 
 image:
-  repository: github.com/KongZ/canary-gate
+  repository: ghcr.io/kongz/canary-gate
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest"
+  tag: "9388b46-dirty"
 
-imagePullSecrets: []
+imagePullSecrets:
+  - name: ghcr
 nameOverride: ""
 fullnameOverride: ""
 
@@ -31,17 +32,20 @@ podLabels: {}
 podSecurityContext: {}
   # fsGroup: 2000
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  allowPrivilegeEscalation: false
+  seccompProfile:
+    type: RuntimeDefault
 
 service:
   type: ClusterIP
-  port: 80
+  port: 8080
 
 ingress:
   enabled: false

@@ -1,12 +1,13 @@
 package handler
 
 import (
-	"canary-gate/noti"
-	"canary-gate/store"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/KongZ/canary-gate/noti"
+	"github.com/KongZ/canary-gate/store"
 
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
@@ -182,10 +183,14 @@ func (h *FlaggerHandler) Gate() http.Handler {
 		approved := h.store.IsGateOpen(StoreKey(canary))
 		if approved {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("Approved"))
+			if _, err := w.Write([]byte("Approved")); err != nil {
+				log.Error().Msgf("Error while writing body %v", err)
+			}
 		} else {
 			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte("Forbidden"))
+			if _, err := w.Write([]byte("Forbidden")); err != nil {
+				log.Error().Msgf("Error while writing body %v", err)
+			}
 		}
 		log.Info().Msgf("%s:%s of %s is approved %v", canary.Name, canary.Namespace, canary.Phase, approved)
 	})

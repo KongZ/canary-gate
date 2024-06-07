@@ -25,11 +25,7 @@ endif
 
 .PHONY: build
 build: ## Build all binaries
-	@${MAKE} build-canary-gate
-
-.PHONY: build-canary-gate
-build-canary-gate: ## Build a canary-gate binary
-	@echo "\033[0;30m\n🚜 Building canary-gate..."
+	@echo "\033[0;31m\n🚜 Building canary-gate..."
 	@go build ${GOFLAGS} -tags "${GOTAGS}" -ldflags "${LDFLAGS}" .
 	@echo "\033[0;32m\n🏃‍♂️ Running Go test..."
 	@go test -race -cover -v ./...
@@ -43,30 +39,30 @@ build-canary-gate: ## Build a canary-gate binary
 build-debug: GOFLAGS += -gcflags "all=-N -l"
 build-debug: build ## Build a binary with remote debugging capabilities
 
-.PHONY: docker-canary-gate
-docker-canary-gate: ## Build a canary-gate Docker image
+.PHONY: docker
+docker: ## Build a canary-gate Docker image
 	@echo "Building architecture ${BUILD_ARCH}"
 	docker build -t ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG} \
 		--platform $(BUILD_ARCH) \
 		--build-arg=VERSION=$(VERSION) \
 		--build-arg=COMMIT_HASH=$(COMMIT_HASH) \
 		--build-arg=BUILD_DATE=$(BUILD_DATE) \
-		-f Dockerfile canary-gate
+		-f Dockerfile .
 
-.PHONY: docker-canary-multi
-docker-canary-multi: BUILD_ARCH := $(strip $(BUILD_ARCH)),linux/arm64
-docker-canary-multi: ## Build a canary-gate Docker image in multi-architect
+.PHONY: docker-multi
+docker-multi: BUILD_ARCH := $(strip $(BUILD_ARCH)),linux/arm64
+docker-multi: ## Build a canary-gate Docker image in multi-architect
 	@echo "Building architecture ${BUILD_ARCH}"
 	docker buildx build -t ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG} \
 		--platform=$(BUILD_ARCH) \
 		--build-arg=VERSION=$(VERSION) \
 		--build-arg=COMMIT_HASH=$(COMMIT_HASH) \
 		--build-arg=BUILD_DATE=$(BUILD_DATE) \
-		-f Dockerfile canary-gate
+		-f Dockerfile .
 
-.PHONY: docker-canary-multi-push
-docker-canary-multi-push: BUILD_ARCH := $(strip $(BUILD_ARCH)),linux/arm64
-docker-canary-multi-push: ## Build a canary-gate Docker image in multi-architect and push to GCR
+.PHONY: docker-multi-push
+docker-multi-push: BUILD_ARCH := $(strip $(BUILD_ARCH)),linux/arm64
+docker-multi-push: ## Build a canary-gate Docker image in multi-architect and push to registry
 	@docker login ghcr.io -u USERNAME -p $(CR_PAT)
 	@echo "Building architecture ${BUILD_ARCH}"
 	docker buildx build -t ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG} \
@@ -75,7 +71,7 @@ docker-canary-multi-push: ## Build a canary-gate Docker image in multi-architect
 		--build-arg=VERSION=$(VERSION) \
 		--build-arg=COMMIT_HASH=$(COMMIT_HASH) \
 		--build-arg=BUILD_DATE=$(BUILD_DATE) \
-		-f Dockerfile canary-gate
+		-f Dockerfile .
 
 release-%: ## Release a new version
 	git tag -m 'Release $*' $*
@@ -97,10 +93,6 @@ minor: ## Release a new minor version
 .PHONY: major
 major: ## Release a new major version
 	@${MAKE} release-$(shell git describe --abbrev=0 --tags | awk -F'[ .]' '{print $$1+1".0.0"}')
-
-.PHONY: run ## Run the piggy-webhooks locally
-run:
-	@cd piggy-webhooks && LISTEN_ADDRESS=:8080 go run .
 
 .PHONY: help
 .DEFAULT_GOAL := help

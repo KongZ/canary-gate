@@ -2,15 +2,19 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: demo
-  namespace: demo
+  labels:
+    app.kubernetes.io/component: demo
+    app.kubernetes.io/instance: demo
 spec:
   selector:
     matchLabels:
-      app: demo
+      app.kubernetes.io/component: demo
+      app.kubernetes.io/instance: demo
   template:
     metadata:
       labels:
-        app: demo
+        app.kubernetes.io/component: demo
+        app.kubernetes.io/instance: demo
     spec:
       automountServiceAccountToken: false
       containers:

@@ -60,3 +60,10 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Create the name of the service to use
+*/}}
+{{- define "canary-gate.service.endpoint" -}}
+{{- printf "%s.%s:%s" (include "canary-gate.fullname" .) .Release.Namespace .Values.service.port }}
+{{- end }}

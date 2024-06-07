@@ -2,7 +2,6 @@ apiVersion: flagger.app/v1beta1
 kind: Canary
 metadata:
   name: demo
-  namespace: demo
 spec:
   targetRef:
     apiVersion: apps/v1
@@ -25,46 +24,33 @@ spec:
           max: 500
         interval: 1m
     webhooks:
-      - name: load-test
-        url: http://flagger-loadtester.test/
-        metadata:
-          cmd: "hey -z 1m -q 10 -c 2 http://demo.demo:9898/"
       - name: "start gate"
         type: confirm-rollout
-        url: http://flagger-loadtester.test/gate/approve
-        retries: 5
+        url: http://canary-gate.canary:8080/event
       - name: "helm test"
         type: pre-rollout
-        url: http://flagger-helmtester.flagger/
-        timeout: 3m
-        metadata:
-          type: "helmv3"
-          cmd: "test podinfo -n test"
+        url: http://canary-gate.canary:8080/event
       - name: "load test"
         type: rollout
-        url: http://flagger-loadtester.test/
-        timeout: 15s
-        metadata:
-          cmd: "hey -z 1m -q 5 -c 2 http://podinfo-canary.test:9898/"
+        url: http://canary-gate.canary:8080/event
       - name: "traffic increase gate"
         type: confirm-traffic-increase
-        url: http://flagger-loadtester.test/gate/approve
+        url: http://canary-gate.canary:8080/event
       - name: "promotion gate"
         type: confirm-promotion
-        url: http://flagger-loadtester.test/gate/approve
+        url: http://canary-gate.canary:8080/event
       - name: "notify"
         type: post-rollout
-        url: http://telegram.bot:8080/
+        url: http://canary-gate.canary:8080/event
         timeout: 5s
         metadata:
           some: "message"
       - name: "rollback gate"
         type: rollback
-        url: http://flagger-loadtester.test/rollback/check
+        url: http://canary-gate.canary:8080/event
       - name: "send to Slack"
         type: event
-        url: http://event-recevier.notifications/slack
-        retries: 3
+        url: http://canary-gate.canary:8080/event
         metadata:
           environment: "test"
           cluster: "flagger-test"
