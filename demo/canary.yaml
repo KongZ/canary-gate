@@ -29,28 +29,22 @@ spec:
     #     thresholdRange:
     #       max: 500
       - interval: 1m
-        name: grpc-request-error-rate
+        name: envoy-error-rate
         templateRef:
-          name: grpc-request-error-rate
+          name: envoy-error-rate
           namespace: flagger
         thresholdRange:
           max: 5
     webhooks:
-      - metadata:
-          cmd: ghz -z 1m -r 10 -c 2 --insecure --call=grpc.health.v1.Health/Check apm-gateway-gateway.apm-gateway.svc.cluster.local:1337
-        name: grpc-load-test
-        timeout: 5s
-        type: rollout
-        url: http://loadtester.flagger/
       - name: "start gate"
         type: confirm-rollout
         url: http://canary-gate.canary:8080/confirm-rollout
       - name: "helm test"
         type: pre-rollout
         url: http://canary-gate.canary:8080/pre-rollout
-      # - name: "load test"
-      #   type: rollout
-      #   url: http://canary-gate.canary:8080/rollout
+      - name: "load test"
+        type: rollout
+        url: http://canary-gate.canary:8080/rollout
       - name: "traffic increase gate"
         type: confirm-traffic-increase
         url: http://canary-gate.canary:8080/confirm-traffic-increase

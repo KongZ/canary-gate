@@ -127,7 +127,7 @@ func (h *FlaggerHandler) PreRollout() http.Handler {
 	})
 }
 
-// Rollout hooks are executed during the analysis on each iteration before the metric checks. If a rollout  call fails the canary advancement is paused and eventfully rolled back.
+// Rollout hooks are executed during the analysis on each iteration before the metric checks. If a rollout call fails the canary advancement is paused and eventfully rolled back.
 func (h *FlaggerHandler) Rollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Info().Msgf("Receiving rollout request ...")
@@ -141,7 +141,7 @@ func (h *FlaggerHandler) Rollout() http.Handler {
 	})
 }
 
-// ConfirmTrafficIncrease hooks are executed right before the weight on the canary is increased. The canary advancement is paused until this  returns HTTP 200.
+// ConfirmTrafficIncrease hooks are executed right before the weight on the canary is increased. The canary advancement is paused until this returns HTTP 200.
 func (h *FlaggerHandler) ConfirmTrafficIncrease() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Info().Msgf("Receiving confirm-traffic-increase request ...")
@@ -152,6 +152,7 @@ func (h *FlaggerHandler) ConfirmTrafficIncrease() http.Handler {
 			return
 		}
 		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
+		w.WriteHeader(http.StatusOK)
 	})
 }
 
@@ -166,6 +167,7 @@ func (h *FlaggerHandler) ConfirmPromotion() http.Handler {
 			return
 		}
 		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
+		w.WriteHeader(http.StatusOK)
 	})
 }
 
