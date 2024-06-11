@@ -151,7 +151,7 @@ func (h *FlaggerHandler) ConfirmTrafficIncrease() http.Handler {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
+		log.Info().Msgf("Received %s:%s event %s [%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Metadata)
 		w.WriteHeader(http.StatusOK)
 	})
 }
@@ -218,7 +218,7 @@ func (h *FlaggerHandler) Event() http.Handler {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
+		log.Info().Msgf("Received %s:%s event %s [%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Metadata)
 		// h.noti.SendMessages()
 	})
 }

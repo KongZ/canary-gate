@@ -8,7 +8,7 @@ image:
   repository: ghcr.io/kongz/canary-gate
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "e7a6587"
+  tag: "709bc4f"
 
 imagePullSecrets:
   - name: ghcr

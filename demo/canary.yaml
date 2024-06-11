@@ -11,7 +11,7 @@ spec:
     port: 8080
   skipAnalysis: false
   analysis:
-    interval: 1m
+    interval: 10s
     threshold: 2
     maxWeight: 50
     stepWeight: 10
