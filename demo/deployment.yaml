@@ -10,6 +10,7 @@ spec:
     matchLabels:
       app.kubernetes.io/component: demo
       app.kubernetes.io/instance: demo
+  replicas: 2
   template:
     metadata:
       labels:

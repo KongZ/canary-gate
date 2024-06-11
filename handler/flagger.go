@@ -100,51 +100,101 @@ func StoreKey(canary *CanaryWebhookPayload) string {
 }
 
 // ConfirmRollout hooks are executed before scaling up the canary deployment and can be used for manual approval. The rollout is paused until the  returns a successful HTTP status code.
-func ConfirmRollout() http.Handler {
+func (h *FlaggerHandler) ConfirmRollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Trace().Msgf("Receiving confirm-rollout request ...")
+		log.Info().Msgf("Receiving confirm-rollout request ...")
+		canary, err := h.readPayload(r)
+		if err != nil {
+			log.Error().Msgf("Reading the request body failed %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
 	})
 }
 
 // PreRollout hooks are executed before routing traffic to canary. The canary advancement is paused if a pre-rollout  fails and if the number of failures reach the threshold the canary will be rollback
-func PreRollout() http.Handler {
+func (h *FlaggerHandler) PreRollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Trace().Msgf("Receiving pre-rollout request ...")
+		log.Info().Msgf("Receiving pre-rollout request ...")
+		canary, err := h.readPayload(r)
+		if err != nil {
+			log.Error().Msgf("Reading the request body failed %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
 	})
 }
 
 // Rollout hooks are executed during the analysis on each iteration before the metric checks. If a rollout  call fails the canary advancement is paused and eventfully rolled back.
-func Rollout() http.Handler {
+func (h *FlaggerHandler) Rollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Trace().Msgf("Receiving rollout request ...")
+		log.Info().Msgf("Receiving rollout request ...")
+		canary, err := h.readPayload(r)
+		if err != nil {
+			log.Error().Msgf("Reading the request body failed %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
 	})
 }
 
 // ConfirmTrafficIncrease hooks are executed right before the weight on the canary is increased. The canary advancement is paused until this  returns HTTP 200.
-func ConfirmTrafficIncrease() http.Handler {
+func (h *FlaggerHandler) ConfirmTrafficIncrease() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Trace().Msgf("Receiving confirm-traffic-increase request ...")
+		log.Info().Msgf("Receiving confirm-traffic-increase request ...")
+		canary, err := h.readPayload(r)
+		if err != nil {
+			log.Error().Msgf("Reading the request body failed %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
 	})
 }
 
 // ConfirmPromotion hooks are executed before the promotion step. The canary promotion is paused until the hooks return HTTP 200. While the promotion is paused, Flagger will continue to run the metrics checks and rollout hooks.
-func ConfirmPromotion() http.Handler {
+func (h *FlaggerHandler) ConfirmPromotion() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Trace().Msgf("Receiving confirm-promotion request ...")
+		log.Info().Msgf("Receiving confirm-promotion request ...")
+		canary, err := h.readPayload(r)
+		if err != nil {
+			log.Error().Msgf("Reading the request body failed %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
 	})
 }
 
 // PostRollout hooks are executed after the canary has been promoted or rolled back. If a post rollout  fails the error is logged.
-func PostRollout() http.Handler {
+func (h *FlaggerHandler) PostRollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Trace().Msgf("Receiving post-rollout request ...")
+		log.Info().Msgf("Receiving post-rollout request ...")
+		canary, err := h.readPayload(r)
+		if err != nil {
+			log.Error().Msgf("Reading the request body failed %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
 	})
 }
 
 // Rollback hooks are executed while a canary deployment is in either Progressing or Waiting status. This provides the ability to rollback during analysis or while waiting for a confirmation. If a rollback  returns a successful HTTP status code, Flagger will stop the analysis and mark the canary release as failed.
-func Rollback() http.Handler {
+func (h *FlaggerHandler) Rollback() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Trace().Msgf("Receiving rollback request ...")
+		log.Info().Msgf("Receiving rollback request ...")
+		canary, err := h.readPayload(r)
+		if err != nil {
+			log.Error().Msgf("Reading the request body failed %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
+		w.WriteHeader(http.StatusForbidden)
 	})
 }
 
