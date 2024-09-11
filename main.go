@@ -16,8 +16,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 )
 
 const (
@@ -27,9 +25,6 @@ const (
 	flagListenAddress    = "listen-address"
 	flagSlackToken       = "slack-token"
 	flagKubernetesClient = "kubernetes-client"
-
-	kubernetesClientNone      = "none"
-	kubernetesClientInCluster = "in-cluster"
 )
 
 func main() {
@@ -70,26 +65,11 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 
-	store, err := store.NewMemoryStore()
+	store, err := store.NewConfigMapStore(nil)
 	if err != nil {
 		return err
 	}
 	slack := noti.NewSlackClient(cmd.String(flagSlackToken))
-
-	var kubeClient kubernetes.Interface
-	if cmd.String(flagKubernetesClient) == kubernetesClientInCluster {
-		log.Info().Msg("creating in-cluster kubernetes client")
-		kubeConfig, err := rest.InClusterConfig()
-		if err != nil {
-			return err
-		}
-		if kubeClient, err = kubernetes.NewForConfig(kubeConfig); err != nil {
-			return err
-		}
-	} else {
-		log.Info().Msg("not creating a kubernetes client")
-	}
-	log.Info().Msgf("%v", kubeClient)
 
 	listenAddress := cmd.String(flagListenAddress)
 	mux := http.NewServeMux()
@@ -105,7 +85,8 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 	mux.Handle("/post-rollout", handler.PostRollout())
 	mux.Handle("/rollback", handler.Rollback())
 	mux.Handle("/event", handler.Event())
-	mux.Handle("/gate", handler.Gate())
+	mux.Handle("/open", handler.OpenGate())
+	mux.Handle("/close", handler.CloseGate())
 	mux.Handle("/metrics", promhttp.Handler())
 	ch := make(chan struct{})
 	server := http.Server{

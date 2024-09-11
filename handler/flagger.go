@@ -7,65 +7,11 @@ import (
 	"net/http"
 
 	"github.com/KongZ/canary-gate/noti"
+	"github.com/KongZ/canary-gate/service"
 	"github.com/KongZ/canary-gate/store"
 
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
-)
-
-// HookType can be pre, post or during rollout
-type HookType string
-
-const (
-	// HookRollout execute web during the canary analysis
-	HookRollout HookType = "rollout"
-	// HookPreRollout execute web before routing traffic to canary
-	HookPreRollout HookType = "pre-rollout"
-	// HookPostRollout execute web after the canary analysis
-	HookPostRollout HookType = "post-rollout"
-	// HookConfirmRollout halt canary analysis until web returns HTTP 200
-	HookConfirmRollout HookType = "confirm-rollout"
-	// HookConfirmPromotion halt canary promotion until web returns HTTP 200
-	HookConfirmPromotion HookType = "confirm-promotion"
-	// HookEvent dispatches Flagger events to the specified endpoint
-	HookEvent HookType = "event"
-	// HookRollback rollback canary analysis if web returns HTTP 200
-	HookRollback HookType = "rollback"
-	// HookConfirmTrafficIncrease increases traffic weight if web returns HTTP 200
-	HookConfirmTrafficIncrease HookType = "confirm-traffic-increase"
-)
-
-// Phase is a label for the condition of a canary at the current time
-type Phase string
-
-const (
-	// PhaseInitializing means the canary initializing is underway
-	PhaseInitializing Phase = "Initializing"
-	// PhaseInitialized means the primary deployment, hpa and ClusterIP services
-	// have been created along with the service mesh or ingress objects
-	PhaseInitialized Phase = "Initialized"
-	// PhaseWaiting means the canary rollout is paused (waiting for confirmation to proceed)
-	PhaseWaiting Phase = "Waiting"
-	// PhaseProgressing means the canary analysis is underway
-	PhaseProgressing Phase = "Progressing"
-	// PhaseWaitingPromotion means the canary promotion is paused (waiting for confirmation to proceed)
-	PhaseWaitingPromotion Phase = "WaitingPromotion"
-	// PhasePromoting means the canary analysis is finished and the primary spec has been updated
-	PhasePromoting Phase = "Promoting"
-	// PhaseFinalising means the canary promotion is finished and traffic has been routed back to primary
-	PhaseFinalising Phase = "Finalising"
-	// PhaseSucceeded means the canary analysis has been successful
-	// and the canary deployment has been promoted
-	PhaseSucceeded Phase = "Succeeded"
-	// PhaseFailed means the canary analysis failed
-	// and the canary deployment has been scaled to zero
-	PhaseFailed Phase = "Failed"
-	// PhaseTerminating means the canary has been marked
-	// for deletion and in the finalizing state
-	PhaseTerminating Phase = "Terminating"
-	// PhaseTerminated means the canary has been finalized
-	// and successfully deleted
-	PhaseTerminated Phase = "Terminated"
 )
 
 // CanaryWebhookPayload holds the deployment info and metadata sent to webhooks
@@ -77,7 +23,7 @@ type CanaryWebhookPayload struct {
 	Namespace string `json:"namespace"`
 
 	// Phase of the canary analysis
-	Phase Phase `json:"phase"`
+	Phase service.Phase `json:"phase"`
 
 	// Hash from the TrackedConfigs and LastAppliedSpec of the Canary.
 	// Can be used to identify a Canary for a specific configuration of the
@@ -88,6 +34,18 @@ type CanaryWebhookPayload struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
+// CanaryGatePayload holds the open/close gate request
+type CanaryGatePayload struct {
+	// Name of the canary
+	Type service.HookType `json:"type"`
+
+	// Name of the canary
+	Name string `json:"name"`
+
+	// Namespace of the canary
+	Namespace string `json:"namespace"`
+}
+
 type FlaggerHandler struct {
 	cmd   *cli.Command
 	noti  noti.Client
@@ -95,21 +53,21 @@ type FlaggerHandler struct {
 }
 
 // StoreKey get store key name
-func StoreKey(canary *CanaryWebhookPayload) string {
-	return fmt.Sprintf("%s:%s:%s", canary.Namespace, canary.Name, canary.Phase)
+func StoreKey(canary *CanaryWebhookPayload, hook service.HookType) string {
+	return fmt.Sprintf("%s:%s:%s", canary.Namespace, canary.Name, hook)
 }
 
 // ConfirmRollout hooks are executed before scaling up the canary deployment and can be used for manual approval. The rollout is paused until the  returns a successful HTTP status code.
 func (h *FlaggerHandler) ConfirmRollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Info().Msgf("Receiving confirm-rollout request ...")
-		canary, err := h.readPayload(r)
+		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
 			log.Error().Msgf("Reading the request body failed %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
+		log.Info().Msgf("Received [confirm-rollout] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
+		h.response(w, r, canary, service.HookConfirmRollout)
 	})
 }
 
@@ -117,13 +75,14 @@ func (h *FlaggerHandler) ConfirmRollout() http.Handler {
 func (h *FlaggerHandler) PreRollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Info().Msgf("Receiving pre-rollout request ...")
-		canary, err := h.readPayload(r)
+		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
 			log.Error().Msgf("Reading the request body failed %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
+		log.Info().Msgf("Received [pre-rollout] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
+		h.response(w, r, canary, service.HookPreRollout)
 	})
 }
 
@@ -131,57 +90,56 @@ func (h *FlaggerHandler) PreRollout() http.Handler {
 func (h *FlaggerHandler) Rollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Info().Msgf("Receiving rollout request ...")
-		canary, err := h.readPayload(r)
+		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
 			log.Error().Msgf("Reading the request body failed %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
+		log.Info().Msgf("Received [rollout] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
+		h.response(w, r, canary, service.HookRollout)
 	})
 }
 
 // ConfirmTrafficIncrease hooks are executed right before the weight on the canary is increased. The canary advancement is paused until this returns HTTP 200.
 func (h *FlaggerHandler) ConfirmTrafficIncrease() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Info().Msgf("Receiving confirm-traffic-increase request ...")
-		canary, err := h.readPayload(r)
+		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
 			log.Error().Msgf("Reading the request body failed %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Info().Msgf("Received %s:%s event %s [%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Metadata)
-		w.WriteHeader(http.StatusOK)
+		log.Info().Msgf("Received [confirm-traffic-increase] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
+		h.response(w, r, canary, service.HookConfirmTrafficIncrease)
 	})
 }
 
 // ConfirmPromotion hooks are executed before the promotion step. The canary promotion is paused until the hooks return HTTP 200. While the promotion is paused, Flagger will continue to run the metrics checks and rollout hooks.
 func (h *FlaggerHandler) ConfirmPromotion() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Info().Msgf("Receiving confirm-promotion request ...")
-		canary, err := h.readPayload(r)
+		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
 			log.Error().Msgf("Reading the request body failed %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
-		w.WriteHeader(http.StatusOK)
+		log.Info().Msgf("Received [confirm-promotion] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
+		h.response(w, r, canary, service.HookConfirmPromotion)
 	})
 }
 
 // PostRollout hooks are executed after the canary has been promoted or rolled back. If a post rollout  fails the error is logged.
 func (h *FlaggerHandler) PostRollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Info().Msgf("Receiving post-rollout request ...")
-		canary, err := h.readPayload(r)
+		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
 			log.Error().Msgf("Reading the request body failed %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
+		log.Info().Msgf("Received [post-rollout] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
+		h.response(w, r, canary, service.HookPostRollout)
 	})
 }
 
@@ -189,14 +147,15 @@ func (h *FlaggerHandler) PostRollout() http.Handler {
 func (h *FlaggerHandler) Rollback() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Info().Msgf("Receiving rollback request ...")
-		canary, err := h.readPayload(r)
+		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
 			log.Error().Msgf("Reading the request body failed %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Info().Msgf("Received %s:%s event %s", canary.Name, canary.Namespace, canary.Phase)
-		w.WriteHeader(http.StatusForbidden)
+		log.Info().Msgf("Received [rollback] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
+		h.response(w, r, canary, service.HookRollback)
+		// w.WriteHeader(http.StatusForbidden)
 	})
 }
 
@@ -212,52 +171,69 @@ func NewHandler(cmd *cli.Command, noti noti.Client, store store.Store) FlaggerHa
 // Event hooks are executed every time Flagger emits a Kubernetes event. When configured, every action that Flagger takes during a canary deployment will be sent as JSON via an HTTP POST request
 func (h *FlaggerHandler) Event() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		canary, err := h.readPayload(r)
+		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
 			log.Error().Msgf("Reading the request body failed %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Info().Msgf("Received %s:%s event %s [%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Metadata)
+		log.Info().Msgf("Received [event] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
 		// h.noti.SendMessages()
 	})
 }
 
-// Gate hooks are executed every time Flagger emits a Kubernetes event. When configured, every action that Flagger takes during a canary deployment will be sent as JSON via an HTTP POST request
-func (h *FlaggerHandler) Gate() http.Handler {
+// OpenGate set gate open
+func (h *FlaggerHandler) OpenGate() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		canary, err := h.readPayload(r)
+		gate, err := readPayload(r, CanaryGatePayload{})
 		if err != nil {
 			log.Error().Msgf("Reading the request body failed %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		approved := h.store.IsGateOpen(StoreKey(canary))
-		if approved {
-			w.WriteHeader(http.StatusOK)
-			if _, err := w.Write([]byte("Approved")); err != nil {
-				log.Error().Msgf("Error while writing body %v", err)
-			}
-		} else {
-			w.WriteHeader(http.StatusForbidden)
-			if _, err := w.Write([]byte("Forbidden")); err != nil {
-				log.Error().Msgf("Error while writing body %v", err)
-			}
-		}
-		log.Info().Msgf("%s:%s of %s is approved %v", canary.Name, canary.Namespace, canary.Phase, approved)
+		h.store.GateOpen(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
 	})
 }
 
-func (h *FlaggerHandler) readPayload(r *http.Request) (*CanaryWebhookPayload, error) {
-	canary := &CanaryWebhookPayload{}
+// CloseGate set gate close
+func (h *FlaggerHandler) CloseGate() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gate, err := readPayload(r, CanaryGatePayload{})
+		if err != nil {
+			log.Error().Msgf("Reading the request body failed %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		h.store.GateClose(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
+	})
+}
+
+func (h *FlaggerHandler) response(w http.ResponseWriter, r *http.Request, canary *CanaryWebhookPayload, hookType service.HookType) {
+	approved := h.store.IsGateOpen(store.StoreKey{Namespace: canary.Namespace, Name: canary.Name, Type: hookType})
+	if approved {
+		log.Info().Msgf("%s:%s of [%s] is approved", canary.Namespace, canary.Name, hookType)
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte("Approved")); err != nil {
+			log.Error().Msgf("Error while writing body %v", err)
+		}
+	} else {
+		log.Info().Msgf("%s:%s of [%s] is rejected", canary.Namespace, canary.Name, hookType)
+		w.WriteHeader(http.StatusForbidden)
+		if _, err := w.Write([]byte("Forbidden")); err != nil {
+			log.Error().Msgf("Error while writing body %v", err)
+		}
+	}
+}
+
+func readPayload[I any](r *http.Request, i I) (*I, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		return canary, err
+		return &i, err
 	}
 	defer r.Body.Close()
-	err = json.Unmarshal(body, canary)
+	err = json.Unmarshal(body, &i)
 	if err != nil {
-		return canary, err
+		return &i, err
 	}
-	return canary, nil
+	return &i, nil
 }
