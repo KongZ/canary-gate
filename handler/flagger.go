@@ -222,20 +222,15 @@ func (h *FlaggerHandler) StatusGate() http.Handler {
 			return
 		}
 		approved := h.store.IsGateOpen(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
+		status := "closed"
 		if approved {
-			log.Info().Msgf("%s:%s of [%s] is opened", gate.Namespace, gate.Name, gate.Type)
-			w.WriteHeader(http.StatusOK)
-			if _, err := w.Write([]byte("Approved")); err != nil {
-				log.Error().Msgf("Error while writing body %v", err)
-				w.WriteHeader(http.StatusInternalServerError)
-			}
-		} else {
-			log.Info().Msgf("%s:%s of [%s] is closed", gate.Namespace, gate.Name, gate.Type)
-			w.WriteHeader(http.StatusForbidden)
-			if _, err := w.Write([]byte("Forbidden")); err != nil {
-				log.Error().Msgf("Error while writing body %v", err)
-				w.WriteHeader(http.StatusInternalServerError)
-			}
+			status = "opened"
+		}
+		w.WriteHeader(http.StatusOK)
+		log.Info().Msgf("%s:%s of [%s] is %s", gate.Namespace, gate.Name, gate.Type, status)
+		if _, err := w.Write([]byte(status)); err != nil {
+			log.Error().Msgf("Error while writing body %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
 		}
 	})
 }

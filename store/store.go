@@ -26,3 +26,7 @@ func defaultText(key StoreKey) string {
 	}
 	return "close"
 }
+
+func (k *StoreKey) String() string {
+	return k.Namespace + ":" + k.Name + ":" + string(k.Type)
+}

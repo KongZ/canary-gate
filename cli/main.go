@@ -34,56 +34,179 @@ func main() {
 
 // createCliApp creates the CLI application using urfave/cli.
 func createCliApp() *cli.Command {
+	const OpenCommand = "open"
+	const CloseCommand = "close"
+	const StatusCommand = "status"
 	return &cli.Command{
 		Name:  "canary-gate",
-		Usage: "A CLI to make HTTP requests to a Kubernetes service via the API proxy",
+		Usage: "A CLI tool to interact with canary gate tasks in Kubernetes",
 		// UsageText: "canary-gate [command options] <cluster-alias> <namespace> <deployment-name>",
-		Description: `canary-gate is a command-line tool that facilitates making HTTP calls 
-to a service running inside a Kubernetes cluster.
-
-It works by:
-1. Using the provided cluster alias from your kubeconfig.
-2. Finding the specified service and its label selector.
-3. Finding a running pod that matches the service's selector.
-4. Sending the HTTP request through the Kubernetes API Server's proxy endpoint.`,
+		Description: `canary-gate is a CLI tool to interact with canary gate tasks in Kubernetes.`,
 		Commands: []*cli.Command{
 			{
-				Name:      "open",
-				UsageText: "Open a canary gate task",
+				Name:      OpenCommand,
+				UsageText: "Open a canary gate task.",
 				Commands: []*cli.Command{
 					{
-						Name:      "confirm-rollout",
-						UsageText: "Confirm the rollout of a new version",
+						Name:      string(service.HookConfirmRollout),
+						UsageText: "Enable the rollout of a new version.",
 						Action: func(ctx context.Context, cmd *cli.Command) error {
-							return run(ctx, cmd, "open")
+							return run(ctx, cmd, OpenCommand)
+						},
+					},
+					{
+						Name:      string(service.HookPreRollout),
+						UsageText: "Allow the canary gate to adavance to pre-rollout state.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, OpenCommand)
+						},
+					},
+					{
+						Name:      string(service.HookRollout),
+						UsageText: "Allow rollout to be continued.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, OpenCommand)
+						},
+					},
+					{
+						Name:      string(service.HookConfirmTrafficIncrease),
+						UsageText: "Confirm the traffic increase after a rollout.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, OpenCommand)
+						},
+					},
+					{
+						Name:      string(service.HookConfirmPromotion),
+						UsageText: "Allow to promote the canary version to production.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, OpenCommand)
+						},
+					},
+					{
+						Name:      string(service.HookPostRollout),
+						UsageText: "Confirm the post-rollout tasks.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, OpenCommand)
+						},
+					},
+					{
+						Name:      string(service.HookRollback),
+						UsageText: "Tell the canary gate to rollback the canary version. This gate can be opened during analysis or while waiting for a confirmation",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, OpenCommand)
 						},
 					},
 				},
-				// Arguments: []cli.Argument{
-				// 	&cli.StringArg{
-				// 		Name:      "task",
-				// 		UsageText: "The type of the canary gate. Valid task: 'confirm-rollout', 'pre-rollout', 'rollout', 'confirm-traffic-increase', 'confirm-promotion', 'post-rollout', 'rollback'",
-				// 	},
-				// },
 			},
 			{
-				Name:      "status",
+				Name:      CloseCommand,
+				UsageText: "Close a canary gate task.",
+				Commands: []*cli.Command{
+					{
+						Name:      string(service.HookConfirmRollout),
+						UsageText: "Halt the rollout of a new version until confirm-rollout gate is opened again.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, CloseCommand)
+						},
+					},
+					{
+						Name:      string(service.HookPreRollout),
+						UsageText: "The canary advancement is paused if a pre-rollout gate is closed.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, CloseCommand)
+						},
+					},
+					{
+						Name:      string(service.HookRollout),
+						UsageText: "Pause the rollout process and rollback if metrics check fails.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, CloseCommand)
+						},
+					},
+					{
+						Name:      string(service.HookConfirmTrafficIncrease),
+						UsageText: "Pause the traffic increase after a rollout.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, CloseCommand)
+						},
+					},
+					{
+						Name:      string(service.HookConfirmPromotion),
+						UsageText: "Halt the promotion of the canary version to production. While the promotion is paused, it will continue to run the metrics checks and rollout gate.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, CloseCommand)
+						},
+					},
+					{
+						Name:      string(service.HookPostRollout),
+						UsageText: "Halt the post-rollout tasks",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, CloseCommand)
+						},
+					},
+					{
+						Name:      string(service.HookRollback),
+						UsageText: "Close the rollout gate.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, CloseCommand)
+						},
+					},
+				},
+			},
+			{
+				Name:      StatusCommand,
 				UsageText: "View status of a canary gate task",
 				Commands: []*cli.Command{
 					{
-						Name:      "confirm-rollout",
-						UsageText: "Confirm the rollout of a new version",
+						Name:      string(service.HookConfirmRollout),
+						UsageText: "View the status of the confirm-rollout gate.",
 						Action: func(ctx context.Context, cmd *cli.Command) error {
-							return run(ctx, cmd, "status")
+							return run(ctx, cmd, StatusCommand)
+						},
+					},
+					{
+						Name:      string(service.HookPreRollout),
+						UsageText: "View the status of the pre-rollout gate.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, StatusCommand)
+						},
+					},
+					{
+						Name:      string(service.HookRollout),
+						UsageText: "View the status of the rollout gate.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, StatusCommand)
+						},
+					},
+					{
+						Name:      string(service.HookConfirmTrafficIncrease),
+						UsageText: "View the status of the confirm-traffic-increase gate.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, StatusCommand)
+						},
+					},
+					{
+						Name:      string(service.HookConfirmPromotion),
+						UsageText: "View the status of the confirm-promotion gate.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, StatusCommand)
+						},
+					},
+					{
+						Name:      string(service.HookPostRollout),
+						UsageText: "View the status of the post-rollout gate.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, StatusCommand)
+						},
+					},
+					{
+						Name:      string(service.HookRollback),
+						UsageText: "View the status of the rollback gate.",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, StatusCommand)
 						},
 					},
 				},
-				// Arguments: []cli.Argument{
-				// 	&cli.StringArg{
-				// 		Name:      "task",
-				// 		UsageText: "The type of the canary gate. Valid task: 'confirm-rollout', 'pre-rollout', 'rollout', 'confirm-traffic-increase', 'confirm-promotion', 'post-rollout', 'rollback'",
-				// 	},
-				// },
 			},
 		},
 		Flags: []cli.Flag{
