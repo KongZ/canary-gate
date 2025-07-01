@@ -24,6 +24,7 @@ const (
 	flagVerbose          = "verbose"
 	flagListenAddress    = "listen-address"
 	flagSlackToken       = "slack-token"
+	flagSlackChannel     = "slack-channel"
 	flagKubernetesClient = "kubernetes-client"
 )
 
@@ -48,6 +49,18 @@ func main() {
 				Value:   defaultAddress,
 				Sources: cli.EnvVars("LISTEN_ADDRESS"),
 			},
+			&cli.StringFlag{
+				Name:    flagSlackToken,
+				Usage:   "Set Slack Bot User OAuth Token",
+				Value:   "",
+				Sources: cli.EnvVars("SLACK_TOKEN"),
+			},
+			&cli.StringFlag{
+				Name:    flagSlackChannel,
+				Usage:   "Set Slack Channel",
+				Value:   "",
+				Sources: cli.EnvVars("SLACK_CHANNEL"),
+			},
 		},
 	}
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
@@ -69,7 +82,10 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	slack := noti.NewSlackClient(cmd.String(flagSlackToken))
+	slack := noti.NewSlackClient(noti.SlackOption{
+		Token:   cmd.String(flagSlackToken),
+		Channel: cmd.String(flagSlackChannel),
+	})
 
 	listenAddress := cmd.String(flagListenAddress)
 	mux := http.NewServeMux()
@@ -87,6 +103,7 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 	mux.Handle("/event", handler.Event())
 	mux.Handle("/open", handler.OpenGate())
 	mux.Handle("/close", handler.CloseGate())
+	mux.Handle("/status", handler.StatusGate())
 	mux.Handle("/metrics", promhttp.Handler())
 	ch := make(chan struct{})
 	server := http.Server{

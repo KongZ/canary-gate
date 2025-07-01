@@ -53,3 +53,14 @@ const (
 	// and successfully deleted
 	PhaseTerminated Phase = "Terminated"
 )
+
+const (
+	// a deployment name
+	MetaName string = "name"
+	// a deployment namespace
+	MetaNamespace string = "namespace"
+	// a deployment cluster
+	MetaCluster string = "cluster"
+	// a name of response user
+	MetaUser string = "user"
+)

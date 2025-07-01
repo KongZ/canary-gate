@@ -1,11 +1,14 @@
 package noti
 
-import "github.com/rs/zerolog/log"
+import (
+	"github.com/KongZ/canary-gate/service"
+	"github.com/rs/zerolog/log"
+)
 
 type noopClient struct{}
 
-func (c *noopClient) SendMessages(channels []string, text, _ string) (map[string]string, error) {
-	if len(channels) > 0 {
+func (c *noopClient) SendMessages(text string, _ service.HookType, _ map[string]string) (map[string]string, error) {
+	if len(text) > 0 {
 		log.Debug().Msgf("Slack disabled. Would've sent the following message: %s", text)
 	}
 	return nil, nil

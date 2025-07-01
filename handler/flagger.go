@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 
 	"github.com/KongZ/canary-gate/noti"
@@ -67,6 +68,9 @@ func (h *FlaggerHandler) ConfirmRollout() http.Handler {
 			return
 		}
 		log.Info().Msgf("Received [confirm-rollout] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
+		if _, err := h.noti.SendMessages("Please confirm rollout action", service.HookConfirmRollout, createMeta(*canary)); err != nil {
+			log.Error().Msgf("Error while sending message %v", err)
+		}
 		h.response(w, r, canary, service.HookConfirmRollout)
 	})
 }
@@ -208,6 +212,34 @@ func (h *FlaggerHandler) CloseGate() http.Handler {
 	})
 }
 
+// StatusGate get gate status
+func (h *FlaggerHandler) StatusGate() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gate, err := readPayload(r, CanaryGatePayload{})
+		if err != nil {
+			log.Error().Msgf("Reading the request body failed %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		approved := h.store.IsGateOpen(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
+		if approved {
+			log.Info().Msgf("%s:%s of [%s] is opened", gate.Namespace, gate.Name, gate.Type)
+			w.WriteHeader(http.StatusOK)
+			if _, err := w.Write([]byte("Approved")); err != nil {
+				log.Error().Msgf("Error while writing body %v", err)
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		} else {
+			log.Info().Msgf("%s:%s of [%s] is closed", gate.Namespace, gate.Name, gate.Type)
+			w.WriteHeader(http.StatusForbidden)
+			if _, err := w.Write([]byte("Forbidden")); err != nil {
+				log.Error().Msgf("Error while writing body %v", err)
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		}
+	})
+}
+
 func (h *FlaggerHandler) response(w http.ResponseWriter, r *http.Request, canary *CanaryWebhookPayload, hookType service.HookType) {
 	approved := h.store.IsGateOpen(store.StoreKey{Namespace: canary.Namespace, Name: canary.Name, Type: hookType})
 	if approved {
@@ -223,6 +255,15 @@ func (h *FlaggerHandler) response(w http.ResponseWriter, r *http.Request, canary
 			log.Error().Msgf("Error while writing body %v", err)
 		}
 	}
+}
+
+func createMeta(canary CanaryWebhookPayload) map[string]string {
+	m := map[string]string{
+		"name":      canary.Name,
+		"namespace": canary.Namespace,
+	}
+	maps.Copy(m, canary.Metadata)
+	return m
 }
 
 func readPayload[I any](r *http.Request, i I) (*I, error) {

@@ -42,7 +42,7 @@ build-debug: build ## Build a binary with remote debugging capabilities
 .PHONY: docker
 docker: ## Build a canary-gate Docker image
 	@echo "Building architecture ${BUILD_ARCH}"
-	docker build -t ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG} \
+	nerdctl build -t ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG} \
 		--platform $(BUILD_ARCH) \
 		--build-arg=VERSION=$(VERSION) \
 		--build-arg=COMMIT_HASH=$(COMMIT_HASH) \
@@ -53,7 +53,7 @@ docker: ## Build a canary-gate Docker image
 docker-multi: BUILD_ARCH := $(strip $(BUILD_ARCH)),linux/arm64
 docker-multi: ## Build a canary-gate Docker image in multi-architect
 	@echo "Building architecture ${BUILD_ARCH}"
-	docker buildx build -t ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG} \
+	nerdctl build -t ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG} \
 		--platform=$(BUILD_ARCH) \
 		--build-arg=VERSION=$(VERSION) \
 		--build-arg=COMMIT_HASH=$(COMMIT_HASH) \
@@ -63,15 +63,15 @@ docker-multi: ## Build a canary-gate Docker image in multi-architect
 .PHONY: docker-multi-push
 docker-multi-push: BUILD_ARCH := $(strip $(BUILD_ARCH)),linux/arm64
 docker-multi-push: ## Build a canary-gate Docker image in multi-architect and push to registry
-	@docker login ghcr.io -u USERNAME -p $(CR_PAT)
+	@nerdctl login ghcr.io -u $(GH_NAME) -p $(CR_PAT)
 	@echo "Building architecture ${BUILD_ARCH}"
-	docker buildx build -t ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG} \
-		--push \
+	nerdctl build -t ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG} \
 		--platform=$(BUILD_ARCH) \
 		--build-arg=VERSION=$(VERSION) \
 		--build-arg=COMMIT_HASH=$(COMMIT_HASH) \
 		--build-arg=BUILD_DATE=$(BUILD_DATE) \
 		-f Dockerfile .
+	nerdctl push ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG}
 
 release-%: ## Release a new version
 	git tag -m 'Release $*' $*
