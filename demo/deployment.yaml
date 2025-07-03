@@ -20,7 +20,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: demo
-          image: ghcr.io/kongz/piggy-demo:latest
+          image: ghcr.io/kongz/piggy-demo:1.0
           resources:
             limits:
               memory: "64Mi"

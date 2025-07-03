@@ -47,6 +47,18 @@ type CanaryGatePayload struct {
 	Namespace string `json:"namespace"`
 }
 
+// CanaryGatePayload holds the open/close gate request
+type CanaryGateStatus struct {
+	// Name of the canary
+	Type service.HookType `json:"type"`
+	// Name of the canary
+	Name string `json:"name"`
+	// Namespace of the canary
+	Namespace string `json:"namespace"`
+	// Gate status
+	Status string `json:"status"`
+}
+
 type FlaggerHandler struct {
 	cmd   *cli.Command
 	noti  noti.Client
@@ -196,6 +208,7 @@ func (h *FlaggerHandler) OpenGate() http.Handler {
 			return
 		}
 		h.store.GateOpen(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
+		h.CliResponse(w, gate, "opened")
 	})
 }
 
@@ -209,6 +222,7 @@ func (h *FlaggerHandler) CloseGate() http.Handler {
 			return
 		}
 		h.store.GateClose(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
+		h.CliResponse(w, gate, "closed")
 	})
 }
 
@@ -226,13 +240,20 @@ func (h *FlaggerHandler) StatusGate() http.Handler {
 		if approved {
 			status = "opened"
 		}
-		w.WriteHeader(http.StatusOK)
-		log.Info().Msgf("%s:%s of [%s] is %s", gate.Namespace, gate.Name, gate.Type, status)
-		if _, err := w.Write([]byte(status)); err != nil {
-			log.Error().Msgf("Error while writing body %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-		}
+		h.CliResponse(w, gate, status)
 	})
+}
+
+func (h *FlaggerHandler) CliResponse(w http.ResponseWriter, gate *CanaryGatePayload, status string) {
+	response := CanaryGateStatus{
+		Type:      gate.Type,
+		Name:      gate.Name,
+		Namespace: gate.Namespace,
+		Status:    status,
+	}
+	w.WriteHeader(http.StatusOK)
+	log.Info().Msgf("%s:%s of [%s] is %s", gate.Namespace, gate.Name, gate.Type, status)
+	writePayload(w, &response)
 }
 
 func (h *FlaggerHandler) response(w http.ResponseWriter, r *http.Request, canary *CanaryWebhookPayload, hookType service.HookType) {
@@ -272,4 +293,16 @@ func readPayload[I any](r *http.Request, i I) (*I, error) {
 		return &i, err
 	}
 	return &i, nil
+}
+
+func writePayload[I any](w http.ResponseWriter, payload *I) {
+	r, err := json.Marshal(&payload)
+	if err != nil {
+		log.Error().Msgf("Error while read payload %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	if _, err := w.Write(r); err != nil {
+		log.Error().Msgf("Error while writing body %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
