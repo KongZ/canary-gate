@@ -1,44 +1,25 @@
 {{- if .Values.serviceAccount.create -}}
+# Define a namespaced Role for CanaryGate CRD access
+# This Role only grants permissions within the namespace.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "canary-gate.fullname" . }}
 rules:
-  - apiGroups:
-      - ""
-    resources:
-      - pods
-    verbs:
-      - "get"
-  - apiGroups:
-      - ""
-    resources:
-      - serviceaccounts
-    verbs:
-      - "get"
-  - apiGroups:
-      - ""
-    resources:
-      - configmaps
-    verbs:
-      - "get"
-      - "list"
-      - "watch"
-      - "create"
-      - "update"
-      - "patch"
-      - "delete"
-{{- if .Values.rbac.psp.enabled }}
-  - apiGroups:
-      - extensions
-    resources:
-      - podsecuritypolicies
-    verbs:
-      - use
-    resourceNames:
-      - {{ template "canary-gate.fullname" . }}
-{{- end }}
+  - apiGroups: ["piggysec.com"]
+    resources: ["canarygates"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["piggysec.com"]
+    resources: ["canarygates/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
 ---
+# Bind the namespaced Role to the ServiceAccount
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -50,5 +31,34 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     namespace: {{ .Release.Namespace }}
-    name: {{ template "canary-gate.serviceAccountName" . }}
+    name: {{ include "canary-gate.serviceAccountName" . }}
+---
+# Define a ClusterRole for Flagger Canary CRD access
+# A ClusterRole is required because the permission applies to all namespaces.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  # ClusterRoles are not namespaced
+  name: {{ template "canary-gate.fullname" . }}-flagger-canary-writer
+rules:
+- apiGroups: ["flagger.app"]
+  resources: ["canaries"]
+  # "write" access
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+# Bind the ClusterRole to the ServiceAccount
+# This grants the 'canarygate-editor-sa' from the 'deployment' namespace
+# the permissions defined in the 'flagger-canary-writer-clusterrole' across the entire cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ template "canary-gate.fullname" . }}-flagger-canary-writer
+subjects:
+- kind: ServiceAccount
+  namespace: {{ .Release.Namespace }}
+  name: {{ include "canary-gate.serviceAccountName" . }}
+roleRef:
+  kind: ClusterRole
+  name: {{ template "canary-gate.fullname" . }}-flagger-canary-writer
+  apiGroup: rbac.authorization.k8s.io
 {{- end }}

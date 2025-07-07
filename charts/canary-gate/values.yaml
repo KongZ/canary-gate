@@ -8,15 +8,19 @@ image:
   repository: ghcr.io/kongz/canary-gate
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "1eaeca5-dirty"
+  tag: "0d97926-dirty"
 
 imagePullSecrets:
   - name: ghcr
 nameOverride: ""
 fullnameOverride: ""
 
+crd:
+  # Create the CustomResourceDefinition for CanaryGate
+  create: true
+
 serviceAccount:
-  # Specifies whether a service account should be created
+  # Create a ServiceAccount
   create: true
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
@@ -101,6 +105,6 @@ tolerations: []
 
 affinity: {}
 
-rbac:
-  psp:
-    enabled: false
+store: 
+  type: "crd"
+

@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"maps"
 	"net/http"
+	"strings"
 
 	"github.com/KongZ/canary-gate/noti"
 	"github.com/KongZ/canary-gate/service"
@@ -75,15 +77,16 @@ func (h *FlaggerHandler) ConfirmRollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
-			log.Error().Msgf("Reading the request body failed %v", err)
-			w.WriteHeader(http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
-		log.Info().Msgf("Received [confirm-rollout] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
-		if _, err := h.noti.SendMessages("Please confirm rollout action", service.HookConfirmRollout, createMeta(*canary)); err != nil {
-			log.Error().Msgf("Error while sending message %v", err)
+		h.logEvent(service.HookConfirmRollout, canary)
+		if h.noti == nil {
+			if _, err := h.noti.SendMessages("Please confirm rollout action", service.HookConfirmRollout, createMeta(*canary)); err != nil {
+				log.Error().Msgf("Error while sending message %v", err)
+			}
 		}
-		h.response(w, r, canary, service.HookConfirmRollout)
+		h.responseWebhook(w, canary, service.HookConfirmRollout)
 	})
 }
 
@@ -93,12 +96,11 @@ func (h *FlaggerHandler) PreRollout() http.Handler {
 		log.Info().Msgf("Receiving pre-rollout request ...")
 		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
-			log.Error().Msgf("Reading the request body failed %v", err)
-			w.WriteHeader(http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
-		log.Info().Msgf("Received [pre-rollout] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
-		h.response(w, r, canary, service.HookPreRollout)
+		h.logEvent(service.HookPreRollout, canary)
+		h.responseWebhook(w, canary, service.HookPreRollout)
 	})
 }
 
@@ -108,12 +110,11 @@ func (h *FlaggerHandler) Rollout() http.Handler {
 		log.Info().Msgf("Receiving rollout request ...")
 		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
-			log.Error().Msgf("Reading the request body failed %v", err)
-			w.WriteHeader(http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
-		log.Info().Msgf("Received [rollout] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
-		h.response(w, r, canary, service.HookRollout)
+		h.logEvent(service.HookRollout, canary)
+		h.responseWebhook(w, canary, service.HookRollout)
 	})
 }
 
@@ -122,12 +123,11 @@ func (h *FlaggerHandler) ConfirmTrafficIncrease() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
-			log.Error().Msgf("Reading the request body failed %v", err)
-			w.WriteHeader(http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
-		log.Info().Msgf("Received [confirm-traffic-increase] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
-		h.response(w, r, canary, service.HookConfirmTrafficIncrease)
+		log.Info().Msgf("Received [confirm-traffic-increase][phase=%s][id=%s] %s [%#v]", canary.Phase, canary.Checksum, h.createWebhookKey(canary), canary.Metadata)
+		h.responseWebhook(w, canary, service.HookConfirmTrafficIncrease)
 	})
 }
 
@@ -136,12 +136,11 @@ func (h *FlaggerHandler) ConfirmPromotion() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
-			log.Error().Msgf("Reading the request body failed %v", err)
-			w.WriteHeader(http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
-		log.Info().Msgf("Received [confirm-promotion] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
-		h.response(w, r, canary, service.HookConfirmPromotion)
+		h.logEvent(service.HookConfirmPromotion, canary)
+		h.responseWebhook(w, canary, service.HookConfirmPromotion)
 	})
 }
 
@@ -150,12 +149,11 @@ func (h *FlaggerHandler) PostRollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
-			log.Error().Msgf("Reading the request body failed %v", err)
-			w.WriteHeader(http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
-		log.Info().Msgf("Received [post-rollout] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
-		h.response(w, r, canary, service.HookPostRollout)
+		log.Info().Msgf("Received [post-rollout][phase=%s][id=%s] %s [%#v]", canary.Phase, canary.Checksum, h.createWebhookKey(canary), canary.Metadata)
+		h.responseWebhook(w, canary, service.HookPostRollout)
 	})
 }
 
@@ -165,12 +163,11 @@ func (h *FlaggerHandler) Rollback() http.Handler {
 		log.Info().Msgf("Receiving rollback request ...")
 		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
-			log.Error().Msgf("Reading the request body failed %v", err)
-			w.WriteHeader(http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
-		log.Info().Msgf("Received [rollback] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
-		h.response(w, r, canary, service.HookRollback)
+		h.logEvent(service.HookRollback, canary)
+		h.responseWebhook(w, canary, service.HookRollback)
 		// w.WriteHeader(http.StatusForbidden)
 	})
 }
@@ -189,11 +186,10 @@ func (h *FlaggerHandler) Event() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
-			log.Error().Msgf("Reading the request body failed %v", err)
-			w.WriteHeader(http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
-		log.Info().Msgf("Received [event] %s:%s event %s [%s][%+v]", canary.Name, canary.Namespace, canary.Phase, canary.Checksum, canary.Metadata)
+		h.logEvent(service.HookEvent, canary)
 		// h.noti.SendMessages()
 	})
 }
@@ -203,12 +199,11 @@ func (h *FlaggerHandler) OpenGate() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gate, err := readPayload(r, CanaryGatePayload{})
 		if err != nil {
-			log.Error().Msgf("Reading the request body failed %v", err)
-			w.WriteHeader(http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
 		h.store.GateOpen(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
-		h.CliResponse(w, gate, "opened")
+		h.responseAPI(w, gate, store.GATE_OPEN)
 	})
 }
 
@@ -217,12 +212,11 @@ func (h *FlaggerHandler) CloseGate() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gate, err := readPayload(r, CanaryGatePayload{})
 		if err != nil {
-			log.Error().Msgf("Reading the request body failed %v", err)
-			w.WriteHeader(http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
 		h.store.GateClose(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
-		h.CliResponse(w, gate, "closed")
+		h.responseAPI(w, gate, store.GATE_CLOSE)
 	})
 }
 
@@ -231,32 +225,61 @@ func (h *FlaggerHandler) StatusGate() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gate, err := readPayload(r, CanaryGatePayload{})
 		if err != nil {
-			log.Error().Msgf("Reading the request body failed %v", err)
-			w.WriteHeader(http.StatusBadRequest)
+			badRequest(w, err)
 			return
 		}
-		approved := h.store.IsGateOpen(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
-		status := "closed"
-		if approved {
-			status = "opened"
+		var gateTypes []service.HookType
+		if gate.Type == service.HookAll {
+			gateTypes = []service.HookType{
+				service.HookConfirmRollout,
+				service.HookPreRollout,
+				service.HookRollout,
+				service.HookConfirmTrafficIncrease,
+				service.HookConfirmPromotion,
+				service.HookPostRollout,
+				service.HookRollback,
+			}
+		} else {
+			gateTypes = []service.HookType{gate.Type}
 		}
-		h.CliResponse(w, gate, status)
+		gateResponseMap := make(map[string][]CanaryGateStatus)
+		for _, gt := range gateTypes {
+			status := store.GateStatus(h.store.IsGateOpen(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gt}))
+			log.Debug().Msgf("%s %s=%s", h.createKey(gate.Namespace, gate.Name), gt, status)
+			h.createResponse(gateResponseMap, gate.Namespace, gate.Name, gt, status)
+		}
+		w.WriteHeader(http.StatusOK)
+		writePayload(w, &gateResponseMap)
 	})
 }
 
-func (h *FlaggerHandler) CliResponse(w http.ResponseWriter, gate *CanaryGatePayload, status string) {
-	response := CanaryGateStatus{
-		Type:      gate.Type,
-		Name:      gate.Name,
-		Namespace: gate.Namespace,
-		Status:    status,
-	}
-	w.WriteHeader(http.StatusOK)
-	log.Info().Msgf("%s:%s of [%s] is %s", gate.Namespace, gate.Name, gate.Type, status)
-	writePayload(w, &response)
+func (h *FlaggerHandler) createWebhookKey(gate *CanaryWebhookPayload) string {
+	return h.createKey(gate.Namespace, gate.Name)
 }
 
-func (h *FlaggerHandler) response(w http.ResponseWriter, r *http.Request, canary *CanaryWebhookPayload, hookType service.HookType) {
+func (h *FlaggerHandler) createKey(namespace string, name string) string {
+	return fmt.Sprintf("%s/%s", namespace, name)
+}
+
+func (h *FlaggerHandler) createResponse(result map[string][]CanaryGateStatus, namespace string, name string, t service.HookType, status string) {
+	key := h.createKey(namespace, name)
+	gateStatus := CanaryGateStatus{
+		Type:      t,
+		Name:      name,
+		Namespace: namespace,
+		Status:    status,
+	}
+	result[key] = append(result[key], gateStatus)
+}
+
+func (h *FlaggerHandler) responseAPI(w http.ResponseWriter, gate *CanaryGatePayload, status string) {
+	gateResponseMap := make(map[string][]CanaryGateStatus)
+	h.createResponse(gateResponseMap, gate.Namespace, gate.Name, gate.Type, status)
+	w.WriteHeader(http.StatusOK)
+	writePayload(w, &gateResponseMap)
+}
+
+func (h *FlaggerHandler) responseWebhook(w http.ResponseWriter, canary *CanaryWebhookPayload, hookType service.HookType) {
 	approved := h.store.IsGateOpen(store.StoreKey{Namespace: canary.Namespace, Name: canary.Name, Type: hookType})
 	if approved {
 		log.Info().Msgf("%s:%s of [%s] is approved", canary.Namespace, canary.Name, hookType)
@@ -273,6 +296,26 @@ func (h *FlaggerHandler) response(w http.ResponseWriter, r *http.Request, canary
 	}
 }
 
+func (h *FlaggerHandler) logEvent(hook service.HookType, canary *CanaryWebhookPayload) {
+	var metadataBuilder strings.Builder
+	for k, v := range canary.Metadata {
+		if k != "eventMessage" {
+			if metadataBuilder.Len() > 0 {
+				metadataBuilder.WriteString(", ")
+			}
+			metadataBuilder.WriteString(fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+	log.Info().Msgf("Received [%s][phase=%s][id=%s] %s %s meta=[%s]", hook, canary.Phase, canary.Checksum, h.createWebhookKey(canary), canary.Metadata["eventMessage"], metadataBuilder.String())
+	if h.store != nil {
+		stor, ok := h.store.(*store.CanaryGateStore)
+		if ok {
+			stor.UpdateCanaryGateStatus(context.TODO(), store.StoreKey{Namespace: canary.Namespace, Name: canary.Name}, string(canary.Phase), metadataBuilder.String())
+		}
+	}
+
+}
+
 func createMeta(canary CanaryWebhookPayload) map[string]string {
 	m := map[string]string{
 		"name":      canary.Name,
@@ -280,6 +323,11 @@ func createMeta(canary CanaryWebhookPayload) map[string]string {
 	}
 	maps.Copy(m, canary.Metadata)
 	return m
+}
+
+func badRequest(w http.ResponseWriter, err error) {
+	log.Error().Msgf("Reading the request body failed %v", err)
+	w.WriteHeader(http.StatusBadRequest)
 }
 
 func readPayload[I any](r *http.Request, i I) (*I, error) {
@@ -296,7 +344,7 @@ func readPayload[I any](r *http.Request, i I) (*I, error) {
 }
 
 func writePayload[I any](w http.ResponseWriter, payload *I) {
-	r, err := json.Marshal(&payload)
+	r, err := json.Marshal(payload)
 	if err != nil {
 		log.Error().Msgf("Error while read payload %v", err)
 		w.WriteHeader(http.StatusInternalServerError)

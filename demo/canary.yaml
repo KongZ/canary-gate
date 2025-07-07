@@ -13,17 +13,17 @@ spec:
   analysis:
     interval: 10s
     threshold: 2
-    maxWeight: 50
-    stepWeight: 2
+    ## use iteration for Blue/Green
+    # iterations: 10
+    ## Use maxWeight and stepWeight for Canary
+    maxWeight: 20
+    stepWeight: 10
     stepWeightPromotion: 100
-    metrics:
-      - interval: 1m
-        name: envoy-error-rate
-        templateRef:
-          name: envoy-error-rate
-          namespace: flagger
-        thresholdRange:
-          max: 5
+    # metrics:
+    #   - interval: 1m
+    #     name: cpu-usage
+    #     thresholdRange:
+    #       max: 5
     webhooks:
       - name: "start gate"
         type: confirm-rollout

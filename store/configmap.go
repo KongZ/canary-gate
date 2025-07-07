@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"sync"
 
 	"github.com/rs/zerolog/log"
@@ -57,7 +56,7 @@ func newK8sClient() (kubernetes.Interface, error) {
 
 // getConfigMapName get store key name
 func (s *ConfigMapStore) getConfigMapName(key StoreKey) string {
-	return fmt.Sprintf("%s-%s", key.Name, ConfigMapSuffix)
+	return fmt.Sprintf("%s-%s-%s", key.Namespace, key.Name, ConfigMapSuffix)
 }
 
 // getConfigMapNamespace get location of configmap
@@ -75,34 +74,37 @@ func (s *ConfigMapStore) createConfigMap(key StoreKey) *corev1.ConfigMap {
 		ObjectMeta: metav1.ObjectMeta{Name: confName},
 		Data:       map[string]string{},
 	}
-	configMap.Data[string(key.Type)] = strconv.FormatBool(defaultValue(key))
-	_, err := s.k8sClient.CoreV1().ConfigMaps(s.getConfigMapNamespace(key)).Create(context.TODO(), configMap, metav1.CreateOptions{})
+	ns := s.getConfigMapNamespace(key)
+	configMap.Data[string(key.Type)] = GateStatus(defaultValue(key))
+	_, err := s.k8sClient.CoreV1().ConfigMaps(ns).Create(context.TODO(), configMap, metav1.CreateOptions{})
 	if err != nil {
-		log.Error().Msgf("Error while creating configmap [%s] %v. Gate [%s] is set to [%s]", confName, err, key.String(), defaultText(key))
+		log.Error().Msgf("Error while creating configmap [%s/%s] %v. Gate [%s] is set to [%s]", ns, confName, err, key.String(), defaultText(key))
 	}
 	return configMap
 }
 
 func (s *ConfigMapStore) updateGate(key StoreKey, val bool) {
 	confName := s.getConfigMapName(key)
+	ns := s.getConfigMapNamespace(key)
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// defer cancel()
-		conf, err := s.k8sClient.CoreV1().ConfigMaps(s.getConfigMapNamespace(key)).Get(context.TODO(), confName, metav1.GetOptions{})
+		conf, err := s.k8sClient.CoreV1().ConfigMaps(ns).Get(context.TODO(), confName, metav1.GetOptions{})
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
-				log.Warn().Msgf("Unable to load configmap [%s].", confName)
+				log.Warn().Msgf("Unable to load configmap [%s/%s].", ns, confName)
 				conf = s.createConfigMap(key)
 			} else if statusError, isStatus := err.(*k8serrors.StatusError); isStatus {
-				log.Error().Msgf("Error to load configmap [%s] %v.", confName, statusError.ErrStatus.Message)
+				log.Error().Msgf("Error to load configmap [%s/%s] %v.", ns, confName, statusError.ErrStatus.Message)
 				return err
 			}
 		}
-		conf.Data[string(key.Type)] = strconv.FormatBool(val)
-		_, err = s.k8sClient.CoreV1().ConfigMaps(s.getConfigMapNamespace(key)).Update(context.TODO(), conf, metav1.UpdateOptions{})
+		conf.Data[string(key.Type)] = GateStatus(val)
+		_, err = s.k8sClient.CoreV1().ConfigMaps(ns).Update(context.TODO(), conf, metav1.UpdateOptions{})
+		log.Trace().Msgf("Saving to configmap [%s/%s]. Gate [%s] is set to [%s]", ns, conf.Name, key, conf.Data[string(key.Type)])
 		return err
 	})
 	if retryErr != nil {
-		log.Error().Msgf("Unable to update configmap [%s] %v.", confName, retryErr)
+		log.Error().Msgf("Unable to update configmap [%s/%s] %v.", ns, confName, retryErr)
 		// cancel()
 	}
 }
@@ -117,23 +119,21 @@ func (s *ConfigMapStore) GateClose(key StoreKey) {
 
 func (s *ConfigMapStore) IsGateOpen(key StoreKey) bool {
 	confName := s.getConfigMapName(key)
-	conf, err := s.k8sClient.CoreV1().ConfigMaps(s.getConfigMapNamespace(key)).Get(context.TODO(), confName, metav1.GetOptions{})
+	ns := s.getConfigMapNamespace(key)
+	conf, err := s.k8sClient.CoreV1().ConfigMaps(ns).Get(context.TODO(), confName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			log.Warn().Msgf("Unable to load configmap [%s]. Gate [%s] is set to [%s]", confName, key, defaultText(key))
+			log.Warn().Msgf("Unable to load configmap [%s/%s]. Gate [%s] is set to [%s]", ns, confName, key, defaultText(key))
 			conf = s.createConfigMap(key)
 		} else if statusError, isStatus := err.(*k8serrors.StatusError); isStatus {
-			log.Error().Msgf("Error to load configmap [%s] %v. Gate [%s] is set to [%s]", confName, statusError.ErrStatus.Message, key.String(), defaultText(key))
+			log.Error().Msgf("Error to load configmap [%s/%s] %v. Gate [%s] is set to [%s]", ns, confName, statusError.ErrStatus.Message, key.String(), defaultText(key))
 			return defaultValue(key)
 		}
 	}
 	val, ok := conf.Data[string(key.Type)]
+	log.Trace().Msgf("Loading from configmap [%s/%s]. Gate [%s] is set to [%s]", ns, conf.Name, key, val)
 	if ok {
-		boolValue, err := strconv.ParseBool(val)
-		if err != nil {
-			return defaultValue(key)
-		}
-		return boolValue
+		return val == GATE_OPEN
 	}
 	return defaultValue(key)
 }

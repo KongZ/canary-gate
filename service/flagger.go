@@ -20,6 +20,8 @@ const (
 	HookRollback HookType = "rollback"
 	// HookConfirmTrafficIncrease increases traffic weight if web returns HTTP 200
 	HookConfirmTrafficIncrease HookType = "confirm-traffic-increase"
+	// HookAll convenience type to represents all hooks
+	HookAll HookType = "all"
 )
 
 type Phase string

@@ -78,10 +78,22 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 
-	store, err := store.NewConfigMapStore(nil)
+	var stor store.Store
+	var err error
+
+	storeName := os.Getenv("CANARY_GATE_STORE")
+	switch storeName {
+	case "configmap":
+		stor, err = store.NewConfigMapStore(nil)
+	case "memory":
+		stor, err = store.NewMemoryStore()
+	default:
+		stor, err = store.NewCanaryGateStore(nil)
+	}
 	if err != nil {
 		return err
 	}
+
 	slack := noti.NewSlackClient(noti.SlackOption{
 		Token:   cmd.String(flagSlackToken),
 		Channel: cmd.String(flagSlackChannel),
@@ -92,7 +104,7 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 	mux.Handle("/healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 	}))
-	handler := handler.NewHandler(cmd, slack, store)
+	handler := handler.NewHandler(cmd, slack, stor)
 	mux.Handle("/confirm-rollout", handler.ConfirmRollout())
 	mux.Handle("/pre-rollout", handler.PreRollout())
 	mux.Handle("/rollout", handler.Rollout())

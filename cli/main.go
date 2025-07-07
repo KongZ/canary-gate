@@ -23,7 +23,19 @@ import (
 // main is the entry point of the application.
 func main() {
 	// Setup structured, human-friendly logging.
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+	writer := zerolog.ConsoleWriter{
+		Out: os.Stdout,
+		FormatFieldValue: func(i interface{}) string {
+			if i == "opened" {
+				return fmt.Sprintf("\x1b[32m ✅ %s\x1b[32m", i) // Example: Green for "opened"
+			} else if i == "closed" {
+				return fmt.Sprintf("\x1b[31m 🔒 %s\x1b[0m", i) // Example: Red for "closed"
+			}
+			return fmt.Sprintf("%v", i)
+		},
+		TimeFormat: time.RFC3339,
+	}
+	log.Logger = log.Output(writer)
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
 	// Create and run the CLI application.
@@ -74,11 +86,11 @@ func createCliApp() *cli.Command {
 	}
 	return &cli.Command{
 		Name:  "canary-gate",
-		Usage: "A CLI tool to interact with canary gate in Kubernetes",
+		Usage: "A CLI tool to interact with canary gate in the Flagger",
 		UsageText: `canary-gate [command] <gate-type> <global-options>
 
 Example: canary-gate open confirm-rollout --cluster-alias my-cluster --namespace my-namespace --deployment my-deployment`,
-		Description: "This tool allows you to open, close, and check the status of canary gate in a Kubernetes cluster.\n" +
+		Description: "This tool allows you to open, close, and check the status of canary gate in the Flagger.\n" +
 			"It interacts with the canary-gate service running in the cluster to manage canary deployments.\n" +
 			"Visits https://github.com/KongZ/canary-gate for more information.",
 		UseShortOptionHandling: true,
@@ -100,9 +112,10 @@ Example: canary-gate open confirm-rollout --cluster my-cluster --namespace my-na
 						},
 					},
 					{
-						Name:  string(service.HookPreRollout),
-						Usage: "Allow the canary gate to adavance to pre-rollout state.",
-						Flags: flags,
+						Name:   string(service.HookPreRollout),
+						Usage:  "Allow the canary gate to adavance to pre-rollout state.",
+						Hidden: true, // Hide this gate. It it not useful.
+						Flags:  flags,
 						Action: func(ctx context.Context, cmd *cli.Command) error {
 							return run(ctx, cmd, OpenCommand)
 						},
@@ -132,9 +145,10 @@ Example: canary-gate open confirm-rollout --cluster my-cluster --namespace my-na
 						},
 					},
 					{
-						Name:  string(service.HookPostRollout),
-						Usage: "Confirm the post-rollout tasks.",
-						Flags: flags,
+						Name:   string(service.HookPostRollout),
+						Usage:  "Confirm the post-rollout tasks.",
+						Hidden: true, // Hide this gate. It it not useful.
+						Flags:  flags,
 						Action: func(ctx context.Context, cmd *cli.Command) error {
 							return run(ctx, cmd, OpenCommand)
 						},
@@ -166,9 +180,10 @@ Example: canary-gate close confirm-rollout --cluster my-cluster --namespace my-n
 						},
 					},
 					{
-						Name:  string(service.HookPreRollout),
-						Usage: "The canary advancement is paused if a pre-rollout gate is closed.",
-						Flags: flags,
+						Name:   string(service.HookPreRollout),
+						Usage:  "The canary advancement is paused if a pre-rollout gate is closed.",
+						Hidden: true, // Hide this gate. It it not useful.
+						Flags:  flags,
 						Action: func(ctx context.Context, cmd *cli.Command) error {
 							return run(ctx, cmd, CloseCommand)
 						},
@@ -198,9 +213,10 @@ Example: canary-gate close confirm-rollout --cluster my-cluster --namespace my-n
 						},
 					},
 					{
-						Name:  string(service.HookPostRollout),
-						Usage: "Halt the post-rollout tasks",
-						Flags: flags,
+						Name:   string(service.HookPostRollout),
+						Usage:  "Halt the post-rollout tasks",
+						Hidden: true, // Hide this gate. It it not useful.
+						Flags:  flags,
 						Action: func(ctx context.Context, cmd *cli.Command) error {
 							return run(ctx, cmd, CloseCommand)
 						},
@@ -224,6 +240,14 @@ Example: canary-gate status confirm-rollout --cluster my-cluster --namespace my-
 				Flags: flags,
 				Commands: []*cli.Command{
 					{
+						Name:  "all",
+						Usage: "View status of all gates.",
+						Flags: flags,
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							return run(ctx, cmd, StatusCommand)
+						},
+					},
+					{
 						Name:  string(service.HookConfirmRollout),
 						Usage: "View the status of the confirm-rollout gate.",
 						Flags: flags,
@@ -232,9 +256,10 @@ Example: canary-gate status confirm-rollout --cluster my-cluster --namespace my-
 						},
 					},
 					{
-						Name:  string(service.HookPreRollout),
-						Usage: "View the status of the pre-rollout gate.",
-						Flags: flags,
+						Name:   string(service.HookPreRollout),
+						Usage:  "View the status of the pre-rollout gate.",
+						Flags:  flags,
+						Hidden: true, // Hide this gate. It it not useful.
 						Action: func(ctx context.Context, cmd *cli.Command) error {
 							return run(ctx, cmd, StatusCommand)
 						},
@@ -264,9 +289,10 @@ Example: canary-gate status confirm-rollout --cluster my-cluster --namespace my-
 						},
 					},
 					{
-						Name:  string(service.HookPostRollout),
-						Usage: "View the status of the post-rollout gate.",
-						Flags: flags,
+						Name:   string(service.HookPostRollout),
+						Usage:  "View the status of the post-rollout gate.",
+						Hidden: true, // Hide this gate. It it not useful.
+						Flags:  flags,
 						Action: func(ctx context.Context, cmd *cli.Command) error {
 							return run(ctx, cmd, StatusCommand)
 						},
@@ -282,10 +308,32 @@ Example: canary-gate status confirm-rollout --cluster my-cluster --namespace my-
 				},
 			},
 			{
-				Name:        "diagram",
-				Usage:       "View the diagram of canary gate workflow",
-				UsageText:   "View the diagram of canary gate workflow",
-				Description: "Displays the diagram of the canary gate workflow, showing how each gate work with open/close command.\n\n" + diagram,
+				Name:      "explain",
+				Usage:     "View the diagram and explain how of canary gate work",
+				UsageText: "View the diagram and explain how of canary gate work",
+				Description: "Displays the diagram of the canary gate workflow, showing how each gate work with open/close command.\n\n" +
+					diagram + `
+Gated canary promotion stages:
+* Scan for canary deployments
+* Check confirm-rollout gate
+  * halt advancement is the gate is closed
+* Check pre-rollout gate (This stage is hidden on the diagram)
+  * halt advancement is the gate is closed
+* Increase canary traffic (step weight or iteration)
+	* Check rollout gate
+		* If gate is open, continue checking metrics
+	* Check canary metrics (If enabled)
+		* Halt advancement if any metric is under the specified threshold
+		* Scale new deployment to zero if the number of failed checks reached the threshold
+	* Check confirm-traffic-increase gate
+		* If gate is open, increase canary traffic weight (step weight) till it reaches (max weight)
+* Check confirm-promotion gate
+  * Halt advancement if gate is closed
+	* If gate is open, copy canary deployment spec template over primary
+* Check post-rollout gate when canary has been promoted or rolled back
+	* Halt advancement if gate is closed
+* If rollout gate is opened, rollback the canary deployment anytime during the canary promotion process.
+`,
 			},
 		},
 		Flags: []cli.Flag{
@@ -342,9 +390,8 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 	method := "POST"
 	canaryPath := fmt.Sprintf("/%s", gate)
 	canaryPort := 8080
-	gateName := service.HookType(cmd.Name)
 	payload := &handler.CanaryGatePayload{
-		Type:      gateName,
+		Type:      service.HookType(cmd.Name),
 		Name:      deployment,
 		Namespace: namespace,
 	}
@@ -352,7 +399,7 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 	log.Info().
 		Str("cluster", clusterAlias).
 		Str("action", canaryPath).
-		Str("gate", string(gateName)).
+		Str("gate", string(payload.Type)).
 		Str("namespace", namespace).
 		Str("deployment", deployment).
 		Msg("Starting operation")
@@ -375,33 +422,9 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 	}
 
 	// --- 2. Find a Pod for the Service ---
-	service, err := clientset.CoreV1().Services(canaryNs).Get(ctx, canarySvc, metav1.GetOptions{})
+	canaryPod, err := findRunningPod(ctx, clientset, canaryNs, canarySvc)
 	if err != nil {
-		return fmt.Errorf("failed to get service '%s' in namespace '%s': %w", canarySvc, canaryNs, err)
-	}
-
-	if len(service.Spec.Selector) == 0 {
-		return fmt.Errorf("service '%s' has no selector, cannot find pods", canarySvc)
-	}
-	labelSelector := labels.SelectorFromSet(service.Spec.Selector).String()
-	log.Trace().Str("selector", labelSelector).Msg("Found service selector")
-
-	pods, err := clientset.CoreV1().Pods(canaryNs).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
-	if err != nil || len(pods.Items) == 0 {
-		return fmt.Errorf("failed to find any pods for service '%s' with selector '%s': %w", canarySvc, labelSelector, err)
-	}
-
-	var canaryPod *v1.Pod
-	for i := range pods.Items {
-		pod := &pods.Items[i]
-		if pod.Status.Phase == v1.PodRunning {
-			canaryPod = pod
-			break
-		}
-	}
-
-	if canaryPod == nil {
-		return fmt.Errorf("no running pods found for service '%s'", canarySvc)
+		return fmt.Errorf("%w for service '%s'", err, canarySvc)
 	}
 	log.Trace().Str("pod_name", canaryPod.Name).Msg("Found running pod backing the service")
 
@@ -413,8 +436,7 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 		Str("path", canaryPath).
 		Msg("Proxying request to pod")
 
-	// Manually construct the path to avoid incorrect URL escaping of the colon
-	// by the default client-go URL builder.
+	// Manually construct the path to avoid incorrect URL escaping of the colon by the default client-go URL builder.
 	proxyPath := fmt.Sprintf(
 		"/api/v1/namespaces/%s/pods/%s:%d/proxy%s",
 		canaryNs,
@@ -444,21 +466,56 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 	}
 
 	// --- 4. Print the Response ---
-	if status, err := readPayload(rawBody, handler.CanaryGateStatus{}); err != nil {
+	if statusMap, err := readPayload(rawBody, map[string][]handler.CanaryGateStatus{}); err != nil {
 		return fmt.Errorf("failed to read response payload: %w", err)
 	} else {
-		log.Info().
-			Str("status", status.Status).
-			Str("name", status.Name).
-			Str("namespace", status.Namespace).
-			Str("gate", string(status.Type)).
-			Msg("Canary Gate Status")
+		for k, v := range *statusMap {
+			for _, s := range v {
+				log.Info().
+					Str("gate", string(s.Type)).
+					Str("status", string(s.Status)).
+					Msgf("Canary Gate Status for %s", k)
+			}
+		}
 	}
-
 	return nil
 }
 
+// findRunningPod locates a running pod associated with a given Kubernetes service.
+// It first retrieves the service definition to find its label selector. Then, it
+// lists all pods matching that selector within the specified namespace. It iterates
+// through the resulting pods and returns the first one that is in the 'Running' state.
+//
+// An error is returned if the service cannot be found, if the service has no
+// selector, if no pods match the selector, or if none of the matching pods are
+// currently running.
+func findRunningPod(ctx context.Context, clientset *kubernetes.Clientset, namespace string, svc string) (*v1.Pod, error) {
+	service, err := clientset.CoreV1().Services(namespace).Get(ctx, svc, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get service '%s' in namespace '%s': %w", svc, namespace, err)
+	}
+
+	if len(service.Spec.Selector) == 0 {
+		return nil, fmt.Errorf("service '%s' has no selector, cannot find pods", svc)
+	}
+	labelSelector := labels.SelectorFromSet(service.Spec.Selector).String()
+	log.Trace().Str("selector", labelSelector).Msg("Found service selector")
+
+	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+	if err != nil || len(pods.Items) == 0 {
+		return nil, fmt.Errorf("failed to find any pods for service '%s' with selector '%s': %w", svc, labelSelector, err)
+	}
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		if pod.Status.Phase == v1.PodRunning {
+			return pod, nil
+		}
+	}
+	return nil, fmt.Errorf("no running pods found")
+}
+
 func readPayload[I any](payload []byte, i I) (*I, error) {
+	log.Trace().Bytes("raw", payload).Msg("Reading payload")
 	err := json.Unmarshal(payload, &i)
 	if err != nil {
 		return &i, err
