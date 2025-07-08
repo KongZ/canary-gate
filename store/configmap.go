@@ -141,3 +141,7 @@ func (s *ConfigMapStore) IsGateOpen(key StoreKey) bool {
 	}
 	return defaultValue(key)
 }
+
+func (s *ConfigMapStore) Shutdown() error {
+	return nil
+}

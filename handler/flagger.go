@@ -93,7 +93,6 @@ func (h *FlaggerHandler) ConfirmRollout() http.Handler {
 // PreRollout hooks are executed before routing traffic to canary. The canary advancement is paused if a pre-rollout  fails and if the number of failures reach the threshold the canary will be rollback
 func (h *FlaggerHandler) PreRollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Info().Msgf("Receiving pre-rollout request ...")
 		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
 			badRequest(w, err)
@@ -107,7 +106,6 @@ func (h *FlaggerHandler) PreRollout() http.Handler {
 // Rollout hooks are executed during the analysis on each iteration before the metric checks. If a rollout call fails the canary advancement is paused and eventfully rolled back.
 func (h *FlaggerHandler) Rollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Info().Msgf("Receiving rollout request ...")
 		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
 			badRequest(w, err)
@@ -126,7 +124,7 @@ func (h *FlaggerHandler) ConfirmTrafficIncrease() http.Handler {
 			badRequest(w, err)
 			return
 		}
-		log.Info().Msgf("Received [confirm-traffic-increase][phase=%s][id=%s] %s [%#v]", canary.Phase, canary.Checksum, h.createWebhookKey(canary), canary.Metadata)
+		h.logEvent(service.HookConfirmTrafficIncrease, canary)
 		h.responseWebhook(w, canary, service.HookConfirmTrafficIncrease)
 	})
 }
@@ -152,7 +150,7 @@ func (h *FlaggerHandler) PostRollout() http.Handler {
 			badRequest(w, err)
 			return
 		}
-		log.Info().Msgf("Received [post-rollout][phase=%s][id=%s] %s [%#v]", canary.Phase, canary.Checksum, h.createWebhookKey(canary), canary.Metadata)
+		h.logEvent(service.HookPostRollout, canary)
 		h.responseWebhook(w, canary, service.HookPostRollout)
 	})
 }
@@ -160,7 +158,6 @@ func (h *FlaggerHandler) PostRollout() http.Handler {
 // Rollback hooks are executed while a canary deployment is in either Progressing or Waiting status. This provides the ability to rollback during analysis or while waiting for a confirmation. If a rollback  returns a successful HTTP status code, Flagger will stop the analysis and mark the canary release as failed.
 func (h *FlaggerHandler) Rollback() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Info().Msgf("Receiving rollback request ...")
 		canary, err := readPayload(r, CanaryWebhookPayload{})
 		if err != nil {
 			badRequest(w, err)
@@ -302,7 +299,7 @@ func (h *FlaggerHandler) logEvent(hook service.HookType, canary *CanaryWebhookPa
 	if h.store != nil {
 		stor, ok := h.store.(*store.CanaryGateStore)
 		if ok {
-			stor.UpdateCanaryGateStatus(context.TODO(), store.StoreKey{Namespace: canary.Namespace, Name: canary.Name}, string(canary.Phase), metadataBuilder.String())
+			stor.UpdateCanaryGateStatus(context.Background(), store.StoreKey{Namespace: canary.Namespace, Name: canary.Name}, string(canary.Phase), canary.Metadata["eventMessage"])
 		}
 	}
 

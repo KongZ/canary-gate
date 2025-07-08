@@ -25,6 +25,7 @@ type Store interface {
 	GateOpen(key StoreKey)
 	GateClose(key StoreKey)
 	IsGateOpen(key StoreKey) bool
+	Shutdown() error
 }
 
 // defaultValue returns the default gate status based on the hook type.

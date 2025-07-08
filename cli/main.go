@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/KongZ/canary-gate/handler"
@@ -26,10 +28,13 @@ func main() {
 	writer := zerolog.ConsoleWriter{
 		Out: os.Stdout,
 		FormatFieldValue: func(i interface{}) string {
-			if i == "opened" {
-				return fmt.Sprintf("\x1b[32m ✅ %s\x1b[32m", i) // Example: Green for "opened"
-			} else if i == "closed" {
-				return fmt.Sprintf("\x1b[31m 🔒 %s\x1b[0m", i) // Example: Red for "closed"
+			if s, ok := i.(string); ok {
+				switch s {
+				case "opened":
+					return fmt.Sprintf("\x1b[32m ✅ %s\x1b[0m", s) // Example: Green for "opened"
+				case "closed":
+					return fmt.Sprintf("\x1b[31m 🔒 %s\x1b[0m", s) // Example: Red for "closed"
+				}
 			}
 			return fmt.Sprintf("%v", i)
 		},
@@ -43,6 +48,13 @@ func main() {
 	if err := app.Run(context.Background(), os.Args); err != nil {
 		log.Fatal().Err(err).Msg("Application failed")
 	}
+}
+
+// ServiceFQDN holds the parsed components of a Kubernetes service FQDN.
+type ServiceFQDN struct {
+	ServiceName string
+	Namespace   string
+	Port        string
 }
 
 // diagram is a string representation of the canary gate workflow diagram.
@@ -64,7 +76,7 @@ func createCliApp() *cli.Command {
 		&cli.StringFlag{
 			Name:     "namespace",
 			Aliases:  []string{"ns"},
-			Usage:    "The namespace where the target service is located",
+			Usage:    "The namespace where the CanaryGate resources is located",
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -72,6 +84,13 @@ func createCliApp() *cli.Command {
 			Aliases:  []string{"d"},
 			Usage:    "The name of the deployment to target",
 			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "endpoint",
+			Aliases:  []string{"e"},
+			Usage:    "The endpoint of the canary-gate service in the cluster",
+			Required: false,
+			Value:    "canary-gate.canary-gate.svc.cluster.local:8080",
 		},
 		&cli.BoolFlag{
 			Name:    "verbose",
@@ -416,23 +435,28 @@ func setLogLevel(level int) error {
 
 // run contains the main logic of the command.
 func run(ctx context.Context, cmd *cli.Command, gate string) error {
-	canaryNs := "canary"
-	canarySvc := "canary-gate"
+	// canaryNs := "canary"
+	// canarySvc := "canary-gate"
 	clusterAlias := cmd.String("cluster")
 	if clusterAlias == "" {
 		return fmt.Errorf("cluster name is required")
-	}
-	namespace := cmd.String("namespace")
-	if namespace == "" {
-		return fmt.Errorf("namespace is required")
 	}
 	deployment := cmd.String("deployment")
 	if deployment == "" {
 		return fmt.Errorf("deployment name is required")
 	}
+	endpoint := cmd.String("endpoint")
+	svcEndpoint, err := parseServiceFQDN(endpoint)
+	if err != nil {
+		return fmt.Errorf("failed to parse service endpoint '%s': %w", endpoint, err)
+	}
+	namespace := cmd.String("namespace")
+	if namespace == "" {
+		namespace = svcEndpoint.Namespace
+		log.Warn().Msgf("Namespace is not specified, using namespace from service endpoint: %s", namespace)
+	}
 	method := "POST"
 	canaryPath := fmt.Sprintf("/%s", gate)
-	canaryPort := 8080
 	payload := &handler.CanaryGatePayload{
 		Type:      service.HookType(cmd.Name),
 		Name:      deployment,
@@ -445,6 +469,7 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 		Str("gate", string(payload.Type)).
 		Str("namespace", namespace).
 		Str("deployment", deployment).
+		Str("endpoint", endpoint).
 		Msg("Starting operation")
 
 	//  Load Kubernetes Configuration
@@ -454,9 +479,9 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 	}
 
 	// Find a Pod for the Service
-	canaryPod, err := findRunningPod(ctx, clientset, canaryNs, canarySvc)
+	canaryPod, err := findRunningPod(ctx, clientset, svcEndpoint.Namespace, svcEndpoint.ServiceName)
 	if err != nil {
-		return fmt.Errorf("%w for service '%s'", err, canarySvc)
+		return fmt.Errorf("%w for service '%s'", err, svcEndpoint.ServiceName)
 	}
 	log.Trace().Str("pod_name", canaryPod.Name).Msg("Found running pod backing the service")
 
@@ -464,16 +489,18 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 	log.Trace().
 		Str("method", method).
 		Str("pod", canaryPod.Name).
-		Int("port", canaryPort).
+		Str("service namespace", svcEndpoint.Namespace).
+		Str("service name", svcEndpoint.ServiceName).
+		Str("service port", svcEndpoint.Port).
 		Str("path", canaryPath).
 		Msg("Proxying request to pod")
 
 	// Manually construct the path to avoid incorrect URL escaping of the colon by the default client-go URL builder.
 	proxyPath := fmt.Sprintf(
-		"/api/v1/namespaces/%s/pods/%s:%d/proxy%s",
-		canaryNs,
+		"/api/v1/namespaces/%s/pods/%s:%s/proxy%s",
+		svcEndpoint.Namespace,
 		canaryPod.Name,
-		canaryPort,
+		svcEndpoint.Port,
 		canaryPath,
 	)
 
@@ -561,6 +588,25 @@ func findRunningPod(ctx context.Context, clientset *kubernetes.Clientset, namesp
 		}
 	}
 	return nil, fmt.Errorf("no running pods found")
+}
+
+// parseServiceFQDN parses a Kubernetes service FQDN string.
+// The expected format is <service-name>.<namespace>.svc.cluster.local:<port>
+func parseServiceFQDN(fqdn string) (*ServiceFQDN, error) {
+	host, port, err := net.SplitHostPort(fqdn)
+	if err != nil {
+		return nil, fmt.Errorf("invalid FQDN format: %w", err)
+	}
+
+	parts := strings.Split(host, ".")
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("invalid FQDN host format: %s", host)
+	}
+	return &ServiceFQDN{
+		ServiceName: parts[0],
+		Namespace:   parts[1],
+		Port:        port,
+	}, nil
 }
 
 func readPayload[I any](payload []byte, i I) (*I, error) {

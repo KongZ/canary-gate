@@ -35,6 +35,10 @@ func (s *MemoryStore) IsGateOpen(key StoreKey) bool {
 	return defaultValue(key)
 }
 
+func (s *MemoryStore) Shutdown() error {
+	return nil
+}
+
 // StoreKey get store key name
 func (s *MemoryStore) getKey(key StoreKey) string {
 	return fmt.Sprintf("%s:%s:%s", key.Namespace, key.Name, key.Type)

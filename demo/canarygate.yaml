@@ -1,0 +1,35 @@
+apiVersion: piggysec.com/v1alpha1
+kind: CanaryGate
+metadata:
+  name: demo
+spec:
+  confirm-rollout: closed
+  pre-rollout: opened
+  rollout: opened
+  confirm-traffic-increase: closed
+  confirm-promotion: closed
+  post-rollout: opened
+  rollback: opened
+  target:
+    namespace: demo
+    name: demo
+  flagger:
+    targetRef:
+      apiVersion: apps/v1
+      kind: Deployment
+      name: demo
+    service:
+      port: 8080
+    skipAnalysis: false
+    analysis:
+      interval: 10s
+      threshold: 2
+      maxWeight: 40
+      stepWeight: 10
+      stepWeightPromotion: 100
+      # more dynamic and unpredictable fields in the future
+      # metrics:
+      #   - interval: 1m
+      #     name: cpu-usage
+      #     thresholdRange:
+      #       max: 5

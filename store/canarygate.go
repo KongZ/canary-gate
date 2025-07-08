@@ -6,14 +6,18 @@ import (
 	"os"
 
 	piggysecv1alpha1 "github.com/KongZ/canary-gate/api/v1alpha1"
+	"github.com/KongZ/canary-gate/controller"
 	"github.com/KongZ/canary-gate/service"
 	"github.com/rs/zerolog/log"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	kubernetesConfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 )
@@ -33,6 +37,8 @@ type CanaryGateStatus struct {
 type CanaryGateStore struct {
 	k8sClient dynamic.Interface
 	configNS  string
+	event     record.EventBroadcaster
+	recorder  record.EventRecorderLogger
 }
 
 var gvr = schema.GroupVersionResource{
@@ -55,9 +61,19 @@ func NewCanaryGateStore(k8sClient dynamic.Interface) (Store, error) {
 	} else {
 		k8s = k8sClient
 	}
+	// Setup EventBroadcaster to send events to the Kubernetes API server
+	eventBroadcaster := record.NewBroadcaster()
+	// Create an instance of our custom DynamicEventSink.
+	dynamicSink := &controller.DynamicEventSink{
+		Client: k8s,
+	}
+	// Tell the broadcaster to use our custom sink.
+	eventBroadcaster.StartRecordingToSink(dynamicSink)
 	store := &CanaryGateStore{
 		k8sClient: k8s,
 		configNS:  os.Getenv("CANARY_GATE_NAMESPACE"),
+		event:     eventBroadcaster,
+		recorder:  eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "canary-gate"}),
 	}
 	return store, nil
 }
@@ -82,6 +98,22 @@ func (s *CanaryGateStore) getCanaryGateNamespace(key StoreKey) string {
 	}
 	return key.Namespace
 }
+
+// getPod get pod from namespace and name.
+func (s *CanaryGateStore) targetName(namespace, name string) string {
+	return fmt.Sprintf("%s/%s", namespace, name)
+}
+
+// // getPod get pod from namespace and name.
+// func (s *CanaryGateStore) getCanaryGate(namespace, name string) (piggysecv1alpha1.CanaryGate, error) {
+// 	unstructuredPod, err := s.k8sClient.Resource(gvr).Namespace(namespace).Get(context.Background(), name, metav1.GetOptions{})
+// 	if err != nil {
+// 		return piggysecv1alpha1.CanaryGate{}, fmt.Errorf("could not find canarygates '%s' in namespace '%s' to attach an event to. Error: %v\n", name, namespace, err)
+// 	}
+// 	var gate piggysecv1alpha1.CanaryGate
+// 	runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredPod.Object, &gate)
+// 	return gate, nil
+// }
 
 // createCanaryGate create Canary Gate object on target namespace.
 func (s *CanaryGateStore) CreateCanaryGate(ctx context.Context, key StoreKey) *piggysecv1alpha1.CanaryGate {
@@ -168,6 +200,8 @@ func (s *CanaryGateStore) UpdateCanaryGate(ctx context.Context, key StoreKey, va
 		}
 		conf.Status.Name = key.Name
 		conf.Status.Namespace = key.Namespace
+		conf.Status.Target = s.targetName(key.Namespace, key.Name)
+
 		// Convert back to unstructured
 		unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(conf)
 		if err != nil {
@@ -182,6 +216,7 @@ func (s *CanaryGateStore) UpdateCanaryGate(ctx context.Context, key StoreKey, va
 	}
 }
 
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 func (s *CanaryGateStore) UpdateCanaryGateStatus(ctx context.Context, key StoreKey, status string, message string) {
 	gateNs := s.getCanaryGateNamespace(key)
 	// Perform the update
@@ -201,6 +236,7 @@ func (s *CanaryGateStore) UpdateCanaryGateStatus(ctx context.Context, key StoreK
 		conf.Status.Namespace = key.Namespace
 		conf.Status.Status = status
 		conf.Status.Message = message
+		conf.Status.Target = s.targetName(key.Namespace, key.Name)
 		// Convert back to unstructured
 		unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(conf)
 		if err != nil {
@@ -209,6 +245,14 @@ func (s *CanaryGateStore) UpdateCanaryGateStatus(ctx context.Context, key StoreK
 		// TODO update gate status
 		_, err = s.k8sClient.Resource(gvr).Namespace(gateNs).Update(ctx, &unstructured.Unstructured{Object: unstructuredObj}, metav1.UpdateOptions{})
 		log.Trace().Msgf("Updating canarygate [%s/%s] status", gateNs, conf.Name)
+		if gate, err := s.GetCanaryGate(ctx, key); err != nil {
+			s.recorder.Event(
+				gate,                   // The object the event is about.
+				corev1.EventTypeNormal, // The type of event.
+				status,                 // A brief reason.
+				message,                // A human-readable message.
+			)
+		}
 		return err
 	})
 	if retryErr != nil {
@@ -260,4 +304,9 @@ func (s *CanaryGateStore) IsGateOpen(key StoreKey) bool {
 		return defaultValue(key)
 	}
 	return GateBoolStatus(status)
+}
+
+func (s *CanaryGateStore) Shutdown() error {
+	s.event.Shutdown()
+	return nil
 }

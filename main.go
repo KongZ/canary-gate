@@ -23,6 +23,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	piggysecv1alpha1 "github.com/KongZ/canary-gate/api/v1alpha1"
@@ -116,8 +117,6 @@ func main() {
 
 // launchController starts the controller manager with the specified health checks.
 func launchController(ctx context.Context, cmd *cli.Command, livez, readyz healthz.Checker) {
-	ctrl.SetLogger(logr.New(&controller.LogrAdapter{}))
-	// ctrl.SetLogger(logr.New(ctrllog.NullLogSink{}))
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		HealthProbeBindAddress: cmd.String(flagControllerAddress),
@@ -131,8 +130,9 @@ func launchController(ctx context.Context, cmd *cli.Command, livez, readyz healt
 		log.Fatal().Msgf("Unable to start controller: %s", err)
 	}
 	if err = (&controller.CanaryGateReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("canary-gate-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		log.Fatal().Msgf("Unable to create controller: %s", err)
 	}
@@ -169,12 +169,26 @@ func appHealthz(r *http.Request) error {
 func launchServer(ctx context.Context, cmd *cli.Command) error {
 	switch count := cmd.Count(flagVerbose); count {
 	case 1:
+		log.Info().Str("level", "debug").Msg("Set log level to [debug]")
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	case 2:
-		zerolog.SetGlobalLevel(zerolog.TraceLevel)
-	default:
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		// disable klog output
 		klog.SetOutput(io.Discard)
+		klog.InitFlags(nil)
+		// diable controller-runtime logging
+		ctrl.SetLogger(logr.New(ctrllog.NullLogSink{}))
+	case 2:
+		log.Info().Str("level", "trace").Msg("Set log level to [trace]")
+		zerolog.SetGlobalLevel(zerolog.TraceLevel)
+		// enable controller-runtime logging
+		ctrl.SetLogger(logr.New(&controller.LogrAdapter{}))
+	default:
+		log.Info().Str("level", "info").Msg("Set log level to [info]")
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		// disable klog output
+		klog.SetOutput(io.Discard)
+		klog.InitFlags(nil)
+		// diable controller-runtime logging
+		ctrl.SetLogger(logr.New(ctrllog.NullLogSink{}))
 	}
 
 	var stor store.Store
@@ -230,6 +244,9 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 		signal.Notify(sigint, syscall.SIGTERM)
 		<-sigint
 		// We received an interrupt signal, shut down.
+		if err := stor.Shutdown(); err != nil {
+			log.Error().Msgf("Store Shutdown: %v", err)
+		}
 		if err := server.Shutdown(context.Background()); err != nil {
 			// Error from closing listeners, or context timeout:
 			log.Error().Msgf("HTTP server Shutdown: %v", err)
