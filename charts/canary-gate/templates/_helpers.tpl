@@ -65,5 +65,5 @@ Create the name of the service account to use
 Create the name of the service to use
 */}}
 {{- define "canary-gate.service.endpoint" -}}
-{{- printf "%s.%s:%s" (include "canary-gate.fullname" .) .Release.Namespace .Values.service.port }}
+{{- printf "http://%s.%s.svc.cluster.local:%s" (include "canary-gate.fullname" .) .Release.Namespace .Values.service.port }}
 {{- end }}

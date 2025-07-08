@@ -42,14 +42,20 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            - name: metrics
+              containerPort:  {{ .Values.metrics.port }}
+              protocol: TCP
+            - name: controller
+              containerPort:  {{ .Values.controller.port }}
+              protocol: TCP
           livenessProbe:
             httpGet:
               path: /healthz
-              port: http
+              port: controller
           readinessProbe:
             httpGet:
-              path: /healthz
-              port: http
+              path: /readyz
+              port: controller
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu | default "10m" }}
@@ -66,6 +72,8 @@ spec:
           env:
             - name: CANARY_GATE_NAME
               value: {{ .Release.Name }}
+            - name: CANARY_GATE_ENDPOINT
+              value: {{ include "canary-gate.service.endpoint" . | quote }}
             - name: CANARY_GATE_NAMESPACE
               valueFrom:
                 fieldRef:

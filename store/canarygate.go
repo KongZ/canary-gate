@@ -257,15 +257,15 @@ func (s *CanaryGateStore) CreateCanaryGate(ctx context.Context, key StoreKey) *C
 		},
 	}
 
-	// Define the flagger data as a simple map
-	flaggerConfig := map[string]interface{}{}
-	// Marshal it to raw JSON bytes
-	flaggerRaw, err := json.Marshal(flaggerConfig)
-	if err != nil {
-		return canaryGate
-	}
-	// Set fields on the passed-in CanaryGate object
-	canaryGate.Spec.Flagger = runtime.RawExtension{Raw: flaggerRaw}
+	// // Define the flagger data as a simple map
+	// flaggerConfig := map[string]interface{}{}
+	// // Marshal it to raw JSON bytes
+	// flaggerRaw, err := json.Marshal(flaggerConfig)
+	// if err != nil {
+	// 	return canaryGate
+	// }
+	// // Set fields on the passed-in CanaryGate object
+	// canaryGate.Spec.Flagger = runtime.RawExtension{Raw: flaggerRaw}
 
 	// Convert the typed object to an unstructured object
 	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(canaryGate)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,6 +12,19 @@ import (
 	"github.com/KongZ/canary-gate/handler"
 	"github.com/KongZ/canary-gate/noti"
 	"github.com/KongZ/canary-gate/store"
+	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/runtime"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+
+	flaggerv1beta1 "github.com/fluxcd/flagger/pkg/apis/flagger/v1beta1"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	piggysecv1beta1 "github.com/KongZ/canary-gate/api/v1beta1"
+	"github.com/KongZ/canary-gate/controller"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
@@ -19,14 +33,28 @@ import (
 )
 
 const (
-	defaultAddress = ":8080"
+	defaultAddress           = ":8080"
+	defaultControllerAddress = ":8081"
+	defaultMetricsAddress    = ":9090"
 
-	flagVerbose          = "verbose"
-	flagListenAddress    = "listen-address"
-	flagSlackToken       = "slack-token"
-	flagSlackChannel     = "slack-channel"
-	flagKubernetesClient = "kubernetes-client"
+	flagVerbose           = "verbose"
+	flagListenAddress     = "listen-address"
+	flagControllerAddress = "controller-address"
+	flagMetricsAddress    = "metrics-address"
+	flagSlackToken        = "slack-token"
+	flagSlackChannel      = "slack-channel"
+	flagKubernetesClient  = "kubernetes-client"
 )
+
+var (
+	scheme = runtime.NewScheme()
+)
+
+func init() {
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(piggysecv1beta1.AddToScheme(scheme))
+	utilruntime.Must(flaggerv1beta1.AddToScheme(scheme))
+}
 
 func main() {
 	cmd := &cli.Command{
@@ -45,9 +73,21 @@ func main() {
 			},
 			&cli.StringFlag{
 				Name:    flagListenAddress,
-				Usage:   "Set server port. Default is :8080",
+				Usage:   fmt.Sprintf("Set server port. Default is %s", defaultAddress),
 				Value:   defaultAddress,
 				Sources: cli.EnvVars("LISTEN_ADDRESS"),
+			},
+			&cli.StringFlag{
+				Name:    flagControllerAddress,
+				Usage:   fmt.Sprintf("Set controller port. Default is %s", defaultControllerAddress),
+				Value:   defaultControllerAddress,
+				Sources: cli.EnvVars("LISTEN_CONTROLLER_ADDRESS"),
+			},
+			&cli.StringFlag{
+				Name:    flagMetricsAddress,
+				Usage:   fmt.Sprintf("Set metrics port. Default is %s", defaultMetricsAddress),
+				Value:   defaultMetricsAddress,
+				Sources: cli.EnvVars("LISTEN_METRICS_ADDRESS"),
 			},
 			&cli.StringFlag{
 				Name:    flagSlackToken,
@@ -63,8 +103,53 @@ func main() {
 			},
 		},
 	}
-	if err := cmd.Run(context.Background(), os.Args); err != nil {
+	ctx := ctrl.SetupSignalHandler()
+	if err := cmd.Run(ctx, os.Args); err != nil {
 		log.Fatal().Msgf("Error: %s", err)
+	}
+}
+
+func launchController(ctx context.Context, cmd *cli.Command, livez, readyz healthz.Checker) {
+	ctrl.SetLogger(logr.New(&controller.LogrAdapter{}))
+	// ctrl.SetLogger(logr.New(ctrllog.NullLogSink{}))
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme:                 scheme,
+		HealthProbeBindAddress: cmd.String(flagControllerAddress),
+		Metrics: metricsserver.Options{
+			BindAddress: cmd.String(flagMetricsAddress),
+		},
+		LeaderElection:   true,
+		LeaderElectionID: "9f9b5a17.piggysec.com",
+	})
+	if err != nil {
+		log.Fatal().Msgf("Unable to start controller: %s", err)
+	}
+	if err = (&controller.CanaryGateReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		log.Fatal().Msgf("Unable to create controller: %s", err)
+	}
+
+	// Setup built-in manager health and ready checks
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		log.Fatal().Msgf("Unable to set up health check: %s", err)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		log.Fatal().Msgf("Unable to set up ready check: %s", err)
+	}
+
+	// Add custom health and ready checks
+	if err := mgr.AddHealthzCheck("app-healthz", livez); err != nil {
+		log.Fatal().Msgf("Unable to set up health check: %s", err)
+	}
+	if err := mgr.AddReadyzCheck("app-readyz", readyz); err != nil {
+		log.Fatal().Msgf("Unable to set up ready check: %s", err)
+	}
+
+	log.Info().Msgf("Starting controller")
+	if err := mgr.Start(ctx); err != nil {
+		log.Fatal().Msgf("Problem running controller: %s", err)
 	}
 }
 
@@ -101,9 +186,9 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 
 	listenAddress := cmd.String(flagListenAddress)
 	mux := http.NewServeMux()
-	mux.Handle("/healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-	}))
+	// mux.Handle("/healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// 	w.WriteHeader(200)
+	// }))
 	handler := handler.NewHandler(cmd, slack, stor)
 	mux.Handle("/confirm-rollout", handler.ConfirmRollout())
 	mux.Handle("/pre-rollout", handler.PreRollout())
@@ -123,6 +208,15 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 		Handler:           mux,
 		ReadHeaderTimeout: 2 * time.Second,
 	}
+
+	appHealthz := func(r *http.Request) error {
+		return nil
+	}
+
+	// start controller
+	go launchController(ctx, cmd, appHealthz, appHealthz)
+
+	// start server
 	go func() {
 		sigint := make(chan os.Signal, 1)
 		signal.Notify(sigint, syscall.SIGTERM)

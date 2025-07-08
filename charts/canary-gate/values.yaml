@@ -8,7 +8,7 @@ image:
   repository: ghcr.io/kongz/canary-gate
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "0d97926-dirty"
+  tag: "2fc1721-dirty"
 
 imagePullSecrets:
   - name: ghcr
@@ -50,6 +50,12 @@ securityContext:
 service:
   type: ClusterIP
   port: 8080
+
+controller:
+  port: 8081
+
+metrics:
+  port: 9090
 
 ingress:
   enabled: false
