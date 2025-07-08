@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/klog"
 
 	flaggerv1beta1 "github.com/fluxcd/flagger/pkg/apis/flagger/v1beta1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -23,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	piggysecv1beta1 "github.com/KongZ/canary-gate/api/v1beta1"
+	piggysecv1alpha1 "github.com/KongZ/canary-gate/api/v1alpha1"
 	"github.com/KongZ/canary-gate/controller"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -52,10 +54,11 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(piggysecv1beta1.AddToScheme(scheme))
+	utilruntime.Must(piggysecv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(flaggerv1beta1.AddToScheme(scheme))
 }
 
+// main is the entry point for the Canary Gate application.
 func main() {
 	cmd := &cli.Command{
 		Name:        "canary-gate",
@@ -94,12 +97,14 @@ func main() {
 				Usage:   "Set Slack Bot User OAuth Token",
 				Value:   "",
 				Sources: cli.EnvVars("SLACK_TOKEN"),
+				Hidden:  true, // Slack integration is not completely implemented yet
 			},
 			&cli.StringFlag{
 				Name:    flagSlackChannel,
 				Usage:   "Set Slack Channel",
 				Value:   "",
 				Sources: cli.EnvVars("SLACK_CHANNEL"),
+				Hidden:  true, // Slack integration is not completely implemented yet
 			},
 		},
 	}
@@ -109,6 +114,7 @@ func main() {
 	}
 }
 
+// launchController starts the controller manager with the specified health checks.
 func launchController(ctx context.Context, cmd *cli.Command, livez, readyz healthz.Checker) {
 	ctrl.SetLogger(logr.New(&controller.LogrAdapter{}))
 	// ctrl.SetLogger(logr.New(ctrllog.NullLogSink{}))
@@ -153,6 +159,13 @@ func launchController(ctx context.Context, cmd *cli.Command, livez, readyz healt
 	}
 }
 
+// appHealthz is a health check function for the application.
+func appHealthz(r *http.Request) error {
+	// app health check always returns nil, indicating the application is healthy.
+	return nil
+}
+
+// launchServer starts the HTTP server for Canary Gate.
 func launchServer(ctx context.Context, cmd *cli.Command) error {
 	switch count := cmd.Count(flagVerbose); count {
 	case 1:
@@ -161,6 +174,7 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 		zerolog.SetGlobalLevel(zerolog.TraceLevel)
 	default:
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		klog.SetOutput(io.Discard)
 	}
 
 	var stor store.Store
@@ -186,9 +200,6 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 
 	listenAddress := cmd.String(flagListenAddress)
 	mux := http.NewServeMux()
-	// mux.Handle("/healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	// 	w.WriteHeader(200)
-	// }))
 	handler := handler.NewHandler(cmd, slack, stor)
 	mux.Handle("/confirm-rollout", handler.ConfirmRollout())
 	mux.Handle("/pre-rollout", handler.PreRollout())
@@ -202,15 +213,12 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 	mux.Handle("/close", handler.CloseGate())
 	mux.Handle("/status", handler.StatusGate())
 	mux.Handle("/metrics", promhttp.Handler())
+	// Note: The health check endpoints are merged with the controller manager.
 	ch := make(chan struct{})
 	server := http.Server{
 		Addr:              listenAddress,
 		Handler:           mux,
 		ReadHeaderTimeout: 2 * time.Second,
-	}
-
-	appHealthz := func(r *http.Request) error {
-		return nil
 	}
 
 	// start controller
@@ -230,18 +238,4 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 	}()
 	log.Info().Msgf("Listening on http://%s", listenAddress)
 	return server.ListenAndServe()
-
-	// http.Handle("/launch-test",
-	// 	promhttp.InstrumentHandlerCounter(
-	// 		promauto.NewCounterVec(
-	// 			prometheus.CounterOpts{
-	// 				Name: "launch_requests_total",
-	// 				Help: "Total number of /launch-test requests by HTTP code.",
-	// 			},
-	// 			[]string{"code"},
-	// 		),
-	// 		launchHandler,
-	// 	),
-	// )
-
 }

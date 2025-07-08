@@ -45,6 +45,7 @@ func main() {
 	}
 }
 
+// diagram is a string representation of the canary gate workflow diagram.
 const diagram = "   .─.        ┌───────────────┐                                 ┌──────────┐                     \n  (   )──────▶│confirm-rollout│───────open─────────────────────▶│ rollout  │◀───────┐            \n   `─'        └───────────────┘                 ┌──close────────└──────────┘        │            \n  deploy              │                         │                     │             │            \n                    close                       ▼                     │             │            \n                      │                        .─.                  open            │            \n                      ▼                       (   )                   │             │            \n                     .─.                       `─'                    ▼             │            \n                    (   )                     pause                  .─.            │            \n                     `─'     ┌──────────────────────────────────────(   )           │            \n                    pause    │                                       `─'            │            \n                           errors                                   check          .─.           \n                             │                                     metrics        (   ) increase \n                             │                                        │            `─'  traffic  \n                             │                                        │             ▲            \n                             │                                        ▼             │            \n                             │                               ┌────────────────┐     │            \n                             │            .─.                │confirm-traffic-│     │            \n                             │           (   )◀────close─────│    increase    │     │            \n                             │            `─'                └────────────────┘     │            \n                             │           pause                        │           close          \n                             │                                      open            │            \n                             │                                        │             │            \n                             ▼                                        ▼             │            \n                            .─.                                ┌────────────┐       │            \n                 rollback  (███)◀───────────────────open───────│  rollback  │───────┘            \n                            `─'                                └────────────┘                    \n                             ▲                                        │                          \n                             │                                    promoting                      \n                             │                                        │                          \n                             │                                        ▼                          \n                            .─.              .─.             ┌─────────────────┐                 \n                           (   )◀──errors───(   )◀──close────│confirm-promotion│                 \n                            `─'              `─'             └─────────────────┘                 \n                           check            pause                     │                          \n                          metrics                                   open                         \n                                                                      │                          \n                                                                      ▼                          \n                                                                     .─.                         \n                                                                    (███)                        \n                                                                     `─'                         \n                                                                   promote                       \n"
 
 // createCliApp creates the CLI application using urfave/cli.
@@ -87,9 +88,33 @@ func createCliApp() *cli.Command {
 	return &cli.Command{
 		Name:  "canary-gate",
 		Usage: "A CLI tool to interact with canary gate in the Flagger",
-		UsageText: `canary-gate [command] <gate-type> <global-options>
+		UsageText: `canary-gate [command] <gate-name> <global-options>
 
-Example: canary-gate open confirm-rollout --cluster-alias my-cluster --namespace my-namespace --deployment my-deployment`,
+Example: canary-gate open confirm-rollout --cluster-alias my-cluster --namespace gate-namespace  --deployment my-deployment
+
+The example command will look for a canary gate configuration named 'my-deployment' under 'gate-namespace' namespace in the 'my-cluster' cluster and open the 'confirm-rollout' gate for that deployment.
+
+apiVersion: piggysec.com/v1alpha1
+kind: CanaryGate
+metadata:
+  name: demo
+spec:
+  confirm-rollout: opened
+  target:
+    namespace: demo
+    name: demo
+  flagger:
+    targetRef:
+      apiVersion: apps/v1
+      kind: Deployment
+      name: demo
+    skipAnalysis: false
+    analysis:
+      interval: 10s
+      threshold: 2
+      maxWeight: 50
+      stepWeight: 10
+`,
 		Description: "This tool allows you to open, close, and check the status of canary gate in the Flagger.\n" +
 			"It interacts with the canary-gate service running in the cluster to manage canary deployments.\n" +
 			"Visits https://github.com/KongZ/canary-gate for more information.",
@@ -98,9 +123,9 @@ Example: canary-gate open confirm-rollout --cluster-alias my-cluster --namespace
 			{
 				Name:  OpenCommand,
 				Usage: "Open a canary gate.",
-				UsageText: `canary-gate open <gate-type> <global-options>
+				UsageText: `canary-gate open <gate-name> <global-options>
 
-Example: canary-gate open confirm-rollout --cluster my-cluster --namespace my-namespace --deployment my-deployment`,
+Example: canary-gate open confirm-rollout --cluster my-cluster --namespace gate-namespace --deployment my-deployment`,
 				Flags: flags,
 				Commands: []*cli.Command{
 					{
@@ -113,7 +138,7 @@ Example: canary-gate open confirm-rollout --cluster my-cluster --namespace my-na
 					},
 					{
 						Name:   string(service.HookPreRollout),
-						Usage:  "Allow the canary gate to adavance to pre-rollout state.",
+						Usage:  "Allow the canary gate to adavance from pre-rollout state.",
 						Hidden: true, // Hide this gate. It it not useful.
 						Flags:  flags,
 						Action: func(ctx context.Context, cmd *cli.Command) error {
@@ -166,9 +191,9 @@ Example: canary-gate open confirm-rollout --cluster my-cluster --namespace my-na
 			{
 				Name:  CloseCommand,
 				Usage: "Close a canary gate.",
-				UsageText: `canary-gate close <gate-type> <global-options>
+				UsageText: `canary-gate close <gate-name> <global-options>
 
-Example: canary-gate close confirm-rollout --cluster my-cluster --namespace my-namespace --deployment my-deployment`,
+Example: canary-gate close confirm-rollout --cluster my-cluster --namespace gate-namespace --deployment my-deployment`,
 				Flags: flags,
 				Commands: []*cli.Command{
 					{
@@ -223,7 +248,7 @@ Example: canary-gate close confirm-rollout --cluster my-cluster --namespace my-n
 					},
 					{
 						Name:  string(service.HookRollback),
-						Usage: "Close the rollout gate.",
+						Usage: "Close the rollback gate. The rollback is still allowed if metrics check fails.",
 						Flags: flags,
 						Action: func(ctx context.Context, cmd *cli.Command) error {
 							return run(ctx, cmd, CloseCommand)
@@ -234,9 +259,9 @@ Example: canary-gate close confirm-rollout --cluster my-cluster --namespace my-n
 			{
 				Name:  StatusCommand,
 				Usage: "Check status of a canary gate.",
-				UsageText: `canary-gate status <gate-type> <global-options>
+				UsageText: `canary-gate status <gate-name> <global-options>
 
-Example: canary-gate status confirm-rollout --cluster my-cluster --namespace my-namespace --deployment my-deployment`,
+Example: canary-gate status confirm-rollout --cluster my-cluster --namespace gate-namespace --deployment my-deployment`,
 				Flags: flags,
 				Commands: []*cli.Command{
 					{
@@ -333,6 +358,31 @@ Gated canary promotion stages:
 * Check post-rollout gate when canary has been promoted or rolled back
 	* Halt advancement if gate is closed
 * If rollout gate is opened, rollback the canary deployment anytime during the canary promotion process.
+
+Example of canarygate CRD file:
+
+apiVersion: piggysec.com/v1alpha1
+kind: CanaryGate
+metadata:
+  name: demo
+spec:
+  confirm-rollout: opened
+  target:
+    namespace: demons
+    name: demo
+  flagger:
+    targetRef:
+      apiVersion: apps/v1
+      kind: Deployment
+      name: demo
+    skipAnalysis: false
+    analysis:
+      interval: 10s
+      threshold: 2
+      maxWeight: 50
+      stepWeight: 10
+
+The configuration above will create the Flagger Canary on the 'demons' namespace with the name 'demo' and it will copy all configuration under 'flagger' field to Flagger Canary. After that the Flagger Canary will be monitored by the canary-gate controller and if CanaryGate is modified, the controller will update the Flagger Canary accordingly.
 `,
 			},
 		},
@@ -352,14 +402,7 @@ Gated canary promotion stages:
 	}
 }
 
-func writePayload[I any](payload *I) []byte {
-	r, err := json.Marshal(&payload)
-	if err == nil {
-		return r
-	}
-	return []byte{}
-}
-
+// setLogLevel sets the global log level based on the verbosity count.
 func setLogLevel(level int) error {
 	if level == 2 {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
@@ -404,31 +447,20 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 		Str("deployment", deployment).
 		Msg("Starting operation")
 
-	// --- 1. Load Kubernetes Configuration ---
-	kubeconfigPath := filepath.Join(os.Getenv("HOME"), ".kube", "config")
-	configLoadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath}
-	configOverrides := &clientcmd.ConfigOverrides{CurrentContext: clusterAlias}
-	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(configLoadingRules, configOverrides)
-
-	restConfig, err := kubeconfig.ClientConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load kubernetes config for cluster '%s': %w", clusterAlias, err)
-	}
-	log.Trace().Str("host", restConfig.Host).Msg("Kubernetes config loaded")
-
-	clientset, err := kubernetes.NewForConfig(restConfig)
+	//  Load Kubernetes Configuration
+	clientset, err := loadKubernetesConfig(clusterAlias)
 	if err != nil {
 		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
 
-	// --- 2. Find a Pod for the Service ---
+	// Find a Pod for the Service
 	canaryPod, err := findRunningPod(ctx, clientset, canaryNs, canarySvc)
 	if err != nil {
 		return fmt.Errorf("%w for service '%s'", err, canarySvc)
 	}
 	log.Trace().Str("pod_name", canaryPod.Name).Msg("Found running pod backing the service")
 
-	// --- 3. Make the HTTP Request via the API Server Proxy ---
+	// Make the HTTP Request via the API Server Proxy
 	log.Trace().
 		Str("method", method).
 		Str("pod", canaryPod.Name).
@@ -447,10 +479,7 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 
 	// Use AbsPath to set the full path for the request, bypassing the builder.
 	req := clientset.CoreV1().RESTClient().Verb(method).AbsPath(proxyPath)
-
-	// Attach the body if data is provided.
 	req.Body(writePayload(payload))
-	// Set a default content type. This can be customized further if needed.
 	req.SetHeader("Content-Type", "application/json")
 
 	// Execute the request and get the raw result.
@@ -465,7 +494,7 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 		return fmt.Errorf("failed to get raw response from proxy: %w", err)
 	}
 
-	// --- 4. Print the Response ---
+	// Print the Response
 	if statusMap, err := readPayload(rawBody, map[string][]handler.CanaryGateStatus{}); err != nil {
 		return fmt.Errorf("failed to read response payload: %w", err)
 	} else {
@@ -479,6 +508,26 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 		}
 	}
 	return nil
+}
+
+// loadKubernetesConfig loads the Kubernetes configuration for the specified cluster alias.
+func loadKubernetesConfig(clusterAlias string) (*kubernetes.Clientset, error) {
+	kubeconfigPath := filepath.Join(os.Getenv("HOME"), ".kube", "config")
+	configLoadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath}
+	configOverrides := &clientcmd.ConfigOverrides{CurrentContext: clusterAlias}
+	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(configLoadingRules, configOverrides)
+
+	restConfig, err := kubeconfig.ClientConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load kubernetes config for cluster '%s': %w", clusterAlias, err)
+	}
+	log.Trace().Str("host", restConfig.Host).Msg("Kubernetes config loaded")
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes clientset: %w", err)
+	}
+	return clientset, nil
 }
 
 // findRunningPod locates a running pod associated with a given Kubernetes service.
@@ -521,4 +570,12 @@ func readPayload[I any](payload []byte, i I) (*I, error) {
 		return &i, err
 	}
 	return &i, nil
+}
+
+func writePayload[I any](payload *I) []byte {
+	r, err := json.Marshal(&payload)
+	if err == nil {
+		return r
+	}
+	return []byte{}
 }

@@ -6,6 +6,7 @@ toolchain go1.24.3
 
 require (
 	github.com/fluxcd/flagger v1.41.0
+	github.com/go-logr/logr v1.4.2
 	github.com/prometheus/client_golang v1.22.0
 	github.com/rs/zerolog v1.34.0
 	github.com/slack-go/slack v0.17.3
@@ -14,6 +15,7 @@ require (
 	k8s.io/api v0.33.2
 	k8s.io/apimachinery v0.33.2
 	k8s.io/client-go v0.33.2
+	k8s.io/klog v1.0.0
 	sigs.k8s.io/controller-runtime v0.21.0
 )
 
@@ -25,7 +27,6 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
-	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect

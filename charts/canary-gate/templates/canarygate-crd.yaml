@@ -6,7 +6,7 @@ metadata:
 spec:
   group: piggysec.com
   versions:
-    - name: v1beta1
+    - name: v1alpha1
       served: true
       storage: true
       schema:
@@ -17,6 +17,7 @@ spec:
               type: object
               required: # You should require the flagger field
               - flagger
+              - target
               properties:
                 confirm-rollout:
                   type: string
@@ -32,6 +33,16 @@ spec:
                   type: string
                 rollback:
                   type: string
+                target: 
+                  type: object
+                  required:
+                  - namespace
+                  - name
+                  properties:
+                    namespace:
+                      type: string
+                    name:
+                      type: string                   
                 flagger:
                   description: Contains the raw spec for the Flagger Canary resource.
                   type: object

@@ -23,6 +23,10 @@ type ConfigMapStore struct {
 	configNS  string
 }
 
+// NewConfigMapStore creates a new ConfigMapStore instance.
+// ConfigMapstore uses Kubernetes ConfigMaps to store gate states.
+// ConfirMaps are created in the namespace specified by the environment variable CANARY_GATE_NAMESPACE.
+// The ConfigMap name is constructed as "<namespace>-<name>-cgate".
 func NewConfigMapStore(k8sClient kubernetes.Interface) (Store, error) {
 	var k8s kubernetes.Interface
 	var err error

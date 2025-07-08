@@ -42,10 +42,10 @@ type CanaryGatePayload struct {
 	// Name of the canary
 	Type service.HookType `json:"type"`
 
-	// Name of the canary
+	// Name of the canarygate crd
 	Name string `json:"name"`
 
-	// Namespace of the canary
+	// Namespace where canarygate crd is created
 	Namespace string `json:"namespace"`
 }
 
@@ -248,8 +248,7 @@ func (h *FlaggerHandler) StatusGate() http.Handler {
 			log.Debug().Msgf("%s %s=%s", h.createKey(gate.Namespace, gate.Name), gt, status)
 			h.createResponse(gateResponseMap, gate.Namespace, gate.Name, gt, status)
 		}
-		w.WriteHeader(http.StatusOK)
-		writePayload(w, &gateResponseMap)
+		writePayload(w, &gateResponseMap, http.StatusOK)
 	})
 }
 
@@ -275,24 +274,17 @@ func (h *FlaggerHandler) createResponse(result map[string][]CanaryGateStatus, na
 func (h *FlaggerHandler) responseAPI(w http.ResponseWriter, gate *CanaryGatePayload, status string) {
 	gateResponseMap := make(map[string][]CanaryGateStatus)
 	h.createResponse(gateResponseMap, gate.Namespace, gate.Name, gate.Type, status)
-	w.WriteHeader(http.StatusOK)
-	writePayload(w, &gateResponseMap)
+	writePayload(w, &gateResponseMap, http.StatusOK)
 }
 
 func (h *FlaggerHandler) responseWebhook(w http.ResponseWriter, canary *CanaryWebhookPayload, hookType service.HookType) {
 	approved := h.store.IsGateOpen(store.StoreKey{Namespace: canary.Namespace, Name: canary.Name, Type: hookType})
 	if approved {
 		log.Info().Msgf("%s:%s of [%s] is approved", canary.Namespace, canary.Name, hookType)
-		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte("Approved")); err != nil {
-			log.Error().Msgf("Error while writing body %v", err)
-		}
+		writeBytes(w, []byte("Approved"), http.StatusOK)
 	} else {
 		log.Info().Msgf("%s:%s of [%s] is rejected", canary.Namespace, canary.Name, hookType)
-		w.WriteHeader(http.StatusForbidden)
-		if _, err := w.Write([]byte("Forbidden")); err != nil {
-			log.Error().Msgf("Error while writing body %v", err)
-		}
+		writeBytes(w, []byte("Forbidden"), http.StatusForbidden)
 	}
 }
 
@@ -343,13 +335,18 @@ func readPayload[I any](r *http.Request, i I) (*I, error) {
 	return &i, nil
 }
 
-func writePayload[I any](w http.ResponseWriter, payload *I) {
+func writePayload[I any](w http.ResponseWriter, payload *I, status int) {
 	r, err := json.Marshal(payload)
 	if err != nil {
 		log.Error().Msgf("Error while read payload %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
-	if _, err := w.Write(r); err != nil {
+	writeBytes(w, r, status)
+}
+
+func writeBytes(w http.ResponseWriter, payload []byte, status int) {
+	w.WriteHeader(status)
+	if _, err := w.Write(payload); err != nil {
 		log.Error().Msgf("Error while writing body %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}

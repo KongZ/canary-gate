@@ -9,6 +9,9 @@ type MemoryStore struct {
 	data *sync.Map
 }
 
+// NewMemoryStore creates a new MemoryStore instance.
+// MemoryStore uses an in-memory map to store gate states.
+// It is suitable for testing or scenarios where persistence is not required.
 func NewMemoryStore() (Store, error) {
 	store := &MemoryStore{
 		data: new(sync.Map),
