@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/KongZ/canary-gate/handler"
@@ -15,9 +13,10 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -27,7 +26,7 @@ func main() {
 	// Setup structured, human-friendly logging.
 	writer := zerolog.ConsoleWriter{
 		Out: os.Stdout,
-		FormatFieldValue: func(i interface{}) string {
+		FormatFieldValue: func(i any) string {
 			if s, ok := i.(string); ok {
 				switch s {
 				case "opened":
@@ -39,8 +38,14 @@ func main() {
 			return fmt.Sprintf("%v", i)
 		},
 		TimeFormat: time.RFC3339,
+		FormatTimestamp: func(i any) string {
+			if t, ok := i.(time.Time); ok {
+				return t.Format(time.RFC3339)
+			}
+			return ""
+		},
 	}
-	log.Logger = log.Output(writer)
+	log.Logger = zerolog.New(writer).With().Logger()
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
 	// Create and run the CLI application.
@@ -60,6 +65,10 @@ type ServiceFQDN struct {
 // diagram is a string representation of the canary gate workflow diagram.
 const diagram = "   .─.        ┌───────────────┐                                 ┌──────────┐                     \n  (   )──────▶│confirm-rollout│───────open─────────────────────▶│ rollout  │◀───────┐            \n   `─'        └───────────────┘                 ┌──close────────└──────────┘        │            \n  deploy              │                         │                     │             │            \n                    close                       ▼                     │             │            \n                      │                        .─.                  open            │            \n                      ▼                       (   )                   │             │            \n                     .─.                       `─'                    ▼             │            \n                    (   )                     pause                  .─.            │            \n                     `─'     ┌──────────────────────────────────────(   )           │            \n                    pause    │                                       `─'            │            \n                           errors                                   check          .─.           \n                             │                                     metrics        (   ) increase \n                             │                                        │            `─'  traffic  \n                             │                                        │             ▲            \n                             │                                        ▼             │            \n                             │                               ┌────────────────┐     │            \n                             │            .─.                │confirm-traffic-│     │            \n                             │           (   )◀────close─────│    increase    │     │            \n                             │            `─'                └────────────────┘     │            \n                             │           pause                        │           close          \n                             │                                      open            │            \n                             │                                        │             │            \n                             ▼                                        ▼             │            \n                            .─.                                ┌────────────┐       │            \n                 rollback  (███)◀───────────────────open───────│  rollback  │───────┘            \n                            `─'                                └────────────┘                    \n                             ▲                                        │                          \n                             │                                    promoting                      \n                             │                                        │                          \n                             │                                        ▼                          \n                            .─.              .─.             ┌─────────────────┐                 \n                           (   )◀──errors───(   )◀──close────│confirm-promotion│                 \n                            `─'              `─'             └─────────────────┘                 \n                           check            pause                     │                          \n                          metrics                                   open                         \n                                                                      │                          \n                                                                      ▼                          \n                                                                     .─.                         \n                                                                    (███)                        \n                                                                     `─'                         \n                                                                   promote                       \n"
 
+const serviceLabel = "app=canary-gate"
+const servicePortName = "http"
+const defaultNamespace = "canary-gate"
+
 // createCliApp creates the CLI application using urfave/cli.
 func createCliApp() *cli.Command {
 	const OpenCommand = "open"
@@ -75,7 +84,7 @@ func createCliApp() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:     "namespace",
-			Aliases:  []string{"ns"},
+			Aliases:  []string{"n"},
 			Usage:    "The namespace where the CanaryGate resources is located",
 			Required: false,
 		},
@@ -84,13 +93,6 @@ func createCliApp() *cli.Command {
 			Aliases:  []string{"d"},
 			Usage:    "The name of the deployment to target",
 			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "endpoint",
-			Aliases:  []string{"e"},
-			Usage:    "The endpoint of the canary-gate service in the cluster",
-			Required: false,
-			Value:    "canary-gate.canary-gate.svc.cluster.local:8080",
 		},
 		&cli.BoolFlag{
 			Name:    "verbose",
@@ -117,6 +119,7 @@ apiVersion: piggysec.com/v1alpha1
 kind: CanaryGate
 metadata:
   name: demo
+	namespace: gate-namespace
 spec:
   confirm-rollout: opened
   target:
@@ -384,6 +387,7 @@ apiVersion: piggysec.com/v1alpha1
 kind: CanaryGate
 metadata:
   name: demo
+	namespace: gate-namespace
 spec:
   confirm-rollout: opened
   target:
@@ -435,8 +439,6 @@ func setLogLevel(level int) error {
 
 // run contains the main logic of the command.
 func run(ctx context.Context, cmd *cli.Command, gate string) error {
-	// canaryNs := "canary"
-	// canarySvc := "canary-gate"
 	clusterAlias := cmd.String("cluster")
 	if clusterAlias == "" {
 		return fmt.Errorf("cluster name is required")
@@ -445,15 +447,10 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 	if deployment == "" {
 		return fmt.Errorf("deployment name is required")
 	}
-	endpoint := cmd.String("endpoint")
-	svcEndpoint, err := parseServiceFQDN(endpoint)
-	if err != nil {
-		return fmt.Errorf("failed to parse service endpoint '%s': %w", endpoint, err)
-	}
 	namespace := cmd.String("namespace")
 	if namespace == "" {
-		namespace = svcEndpoint.Namespace
-		log.Warn().Msgf("Namespace is not specified, using namespace from service endpoint: %s", namespace)
+		namespace = defaultNamespace
+		log.Debug().Msgf("Namespace is not specified, using default namespace '%s'", defaultNamespace)
 	}
 	method := "POST"
 	canaryPath := fmt.Sprintf("/%s", gate)
@@ -463,13 +460,12 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 		Namespace: namespace,
 	}
 
-	log.Info().
+	log.Debug().
 		Str("cluster", clusterAlias).
 		Str("action", canaryPath).
 		Str("gate", string(payload.Type)).
 		Str("namespace", namespace).
 		Str("deployment", deployment).
-		Str("endpoint", endpoint).
 		Msg("Starting operation")
 
 	//  Load Kubernetes Configuration
@@ -477,30 +473,42 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
+	// Find service by label
+	service, err := findServiceByLabel(clientset, namespace, serviceLabel)
+	if err != nil {
+		return fmt.Errorf("failed to find service with label '%s' in namespace '%s'", serviceLabel, namespace)
+	}
 
 	// Find a Pod for the Service
-	canaryPod, err := findRunningPod(ctx, clientset, svcEndpoint.Namespace, svcEndpoint.ServiceName)
+	canaryPod, err := findRunningPod(ctx, clientset, namespace, service.Name)
 	if err != nil {
-		return fmt.Errorf("%w for service '%s'", err, svcEndpoint.ServiceName)
+		return fmt.Errorf("%w for service '%s'", err, service.Name)
 	}
+
+	// Find open port
+	podPort, err := findPodPortFromServicePort(canaryPod, service, servicePortName)
+	if err != nil {
+		return fmt.Errorf("failed to find port '%s' in service '%s': %w", servicePortName, service.Name, err)
+	}
+
 	log.Trace().Str("pod_name", canaryPod.Name).Msg("Found running pod backing the service")
 
 	// Make the HTTP Request via the API Server Proxy
 	log.Trace().
 		Str("method", method).
 		Str("pod", canaryPod.Name).
-		Str("service namespace", svcEndpoint.Namespace).
-		Str("service name", svcEndpoint.ServiceName).
-		Str("service port", svcEndpoint.Port).
+		Str("service namespace", namespace).
+		Str("service name", service.Name).
+		Int("service port", podPort).
 		Str("path", canaryPath).
 		Msg("Proxying request to pod")
 
 	// Manually construct the path to avoid incorrect URL escaping of the colon by the default client-go URL builder.
 	proxyPath := fmt.Sprintf(
-		"/api/v1/namespaces/%s/pods/%s:%s/proxy%s",
-		svcEndpoint.Namespace,
+		"/api/v1/namespaces/%s/pods/%s:%d/proxy%s",
+		namespace,
 		canaryPod.Name,
-		svcEndpoint.Port,
+		podPort,
 		canaryPath,
 	)
 
@@ -526,11 +534,15 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 		return fmt.Errorf("failed to read response payload: %w", err)
 	} else {
 		for k, v := range *statusMap {
+			pad := "%-25s"
+			if len(v) == 1 {
+				pad = "%s"
+			}
 			for _, s := range v {
 				log.Info().
-					Str("gate", string(s.Type)).
+					Str("gate", fmt.Sprintf(pad, string(s.Type))).
 					Str("status", string(s.Status)).
-					Msgf("Canary Gate Status for %s", k)
+					Msgf("Canary Gate Status for [%s]", k)
 			}
 		}
 	}
@@ -557,6 +569,21 @@ func loadKubernetesConfig(clusterAlias string) (*kubernetes.Clientset, error) {
 	return clientset, nil
 }
 
+// findServiceByLabel finds the first service that matches the given label selector.
+func findServiceByLabel(clientset *kubernetes.Clientset, namespace, labelSelector string) (*corev1.Service, error) {
+	services, err := clientset.CoreV1().Services(namespace).List(context.Background(), metav1.ListOptions{
+		LabelSelector: labelSelector,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(services.Items) == 0 {
+		return nil, fmt.Errorf("no services found with label selector '%s'", labelSelector)
+	}
+	// Return the first service found
+	return &services.Items[0], nil
+}
+
 // findRunningPod locates a running pod associated with a given Kubernetes service.
 // It first retrieves the service definition to find its label selector. Then, it
 // lists all pods matching that selector within the specified namespace. It iterates
@@ -565,7 +592,7 @@ func loadKubernetesConfig(clusterAlias string) (*kubernetes.Clientset, error) {
 // An error is returned if the service cannot be found, if the service has no
 // selector, if no pods match the selector, or if none of the matching pods are
 // currently running.
-func findRunningPod(ctx context.Context, clientset *kubernetes.Clientset, namespace string, svc string) (*v1.Pod, error) {
+func findRunningPod(ctx context.Context, clientset *kubernetes.Clientset, namespace string, svc string) (*corev1.Pod, error) {
 	service, err := clientset.CoreV1().Services(namespace).Get(ctx, svc, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get service '%s' in namespace '%s': %w", svc, namespace, err)
@@ -583,30 +610,47 @@ func findRunningPod(ctx context.Context, clientset *kubernetes.Clientset, namesp
 	}
 	for i := range pods.Items {
 		pod := &pods.Items[i]
-		if pod.Status.Phase == v1.PodRunning {
+		if pod.Status.Phase == corev1.PodRunning {
 			return pod, nil
 		}
 	}
 	return nil, fmt.Errorf("no running pods found")
 }
 
-// parseServiceFQDN parses a Kubernetes service FQDN string.
-// The expected format is <service-name>.<namespace>.svc.cluster.local:<port>
-func parseServiceFQDN(fqdn string) (*ServiceFQDN, error) {
-	host, port, err := net.SplitHostPort(fqdn)
-	if err != nil {
-		return nil, fmt.Errorf("invalid FQDN format: %w", err)
+// findPodPortFromServicePort resolves a service port to a numeric pod container port.
+func findPodPortFromServicePort(pod *corev1.Pod, service *corev1.Service, servicePortName string) (int, error) {
+	var servicePort *corev1.ServicePort
+	// Find the service port with the matching name
+	for _, p := range service.Spec.Ports {
+		if p.Name == servicePortName {
+			servicePort = &p
+			break
+		}
+	}
+	if servicePort == nil {
+		return 0, fmt.Errorf("service '%s' does not have a port named '%s'", service.Name, servicePortName)
 	}
 
-	parts := strings.Split(host, ".")
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("invalid FQDN host format: %s", host)
+	// Check if the targetPort is a number or a name
+	targetPort := servicePort.TargetPort
+	if targetPort.Type == intstr.Int {
+		// Target port is a number, return it directly
+		return targetPort.IntValue(), nil
 	}
-	return &ServiceFQDN{
-		ServiceName: parts[0],
-		Namespace:   parts[1],
-		Port:        port,
-	}, nil
+
+	// Target port is a name, look it up in the pod's container ports
+	if targetPort.Type == intstr.String {
+		namedPort := targetPort.String()
+		for _, container := range pod.Spec.Containers {
+			for _, port := range container.Ports {
+				if port.Name == namedPort {
+					return int(port.ContainerPort), nil
+				}
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("could not find matching named port '%s' in pod '%s'", targetPort.String(), pod.Name)
 }
 
 func readPayload[I any](payload []byte, i I) (*I, error) {

@@ -3,6 +3,7 @@ kind: Service
 metadata:
   name: {{ include "canary-gate.fullname" . }}
   labels:
+    app: "canary-gate"
     {{- include "canary-gate.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}

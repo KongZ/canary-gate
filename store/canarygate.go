@@ -16,7 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	kubernetesConfig "sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -67,13 +66,17 @@ func NewCanaryGateStore(k8sClient dynamic.Interface) (Store, error) {
 	dynamicSink := &controller.DynamicEventSink{
 		Client: k8s,
 	}
+	scheme := runtime.NewScheme()
+	if err = piggysecv1alpha1.AddToScheme(scheme); err != nil {
+		log.Error().Msgf("error creating k8s scheme: %s", err)
+	}
 	// Tell the broadcaster to use our custom sink.
 	eventBroadcaster.StartRecordingToSink(dynamicSink)
 	store := &CanaryGateStore{
 		k8sClient: k8s,
 		configNS:  os.Getenv("CANARY_GATE_NAMESPACE"),
 		event:     eventBroadcaster,
-		recorder:  eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "canary-gate"}),
+		recorder:  eventBroadcaster.NewRecorder(scheme, corev1.EventSource{Component: "canarygate"}),
 	}
 	return store, nil
 }
@@ -245,13 +248,15 @@ func (s *CanaryGateStore) UpdateCanaryGateStatus(ctx context.Context, key StoreK
 		// TODO update gate status
 		_, err = s.k8sClient.Resource(gvr).Namespace(gateNs).Update(ctx, &unstructured.Unstructured{Object: unstructuredObj}, metav1.UpdateOptions{})
 		log.Trace().Msgf("Updating canarygate [%s/%s] status", gateNs, conf.Name)
-		if gate, err := s.GetCanaryGate(ctx, key); err != nil {
-			s.recorder.Event(
-				gate,                   // The object the event is about.
-				corev1.EventTypeNormal, // The type of event.
-				status,                 // A brief reason.
-				message,                // A human-readable message.
-			)
+		if message != "" {
+			if gate, err := s.GetCanaryGate(ctx, key); err == nil {
+				s.recorder.Event(
+					gate,                   // The object the event is about.
+					corev1.EventTypeNormal, // The type of event.
+					status,                 // A brief reason.
+					message,                // A human-readable message.
+				)
+			}
 		}
 		return err
 	})

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/go-logr/logr"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -16,7 +17,7 @@ func (a *LogrAdapter) Init(info logr.RuntimeInfo) {
 
 // Enabled returns true if the logger is enabled. We'll always enable it.
 func (a *LogrAdapter) Enabled(level int) bool {
-	return true
+	return level == int(zerolog.DefaultContextLogger.GetLevel())
 }
 
 // Info logs an info message.

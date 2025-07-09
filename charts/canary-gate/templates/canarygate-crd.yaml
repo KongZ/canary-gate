@@ -61,7 +61,7 @@ spec:
       - name: Status
         type: string
         description: The current phase of the CanaryGate
-        jsonPath: .status.phase
+        jsonPath: .status.status
       - name: Confirm-rollout
         type: string
         description: The current confirm-rollout gate status
