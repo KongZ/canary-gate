@@ -295,14 +295,18 @@ func (h *FlaggerHandler) logEvent(hook service.HookType, canary *CanaryWebhookPa
 			metadataBuilder.WriteString(fmt.Sprintf("%s=%s", k, v))
 		}
 	}
-	log.Info().Msgf("Received [%s][phase=%s][id=%s] %s %s meta=[%s]", hook, canary.Phase, canary.Checksum, h.createWebhookKey(canary), canary.Metadata["eventMessage"], metadataBuilder.String())
+	message := canary.Metadata["eventMessage"]
+	// Flagger events do not send phase suceeeded to event. Only post-rollout gets phase succeeded.
+	if strings.Contains(message, "Promotion completed!") {
+		canary.Phase = service.PhaseSucceeded
+	}
+	log.Info().Msgf("Received [%s][phase=%s][id=%s] %s %s meta=[%s]", hook, canary.Phase, canary.Checksum, h.createWebhookKey(canary), message, metadataBuilder.String())
 	if h.store != nil {
 		stor, ok := h.store.(*store.CanaryGateStore)
 		if ok {
-			stor.UpdateCanaryGateStatus(context.Background(), store.StoreKey{Namespace: canary.Namespace, Name: canary.Name}, string(canary.Phase), canary.Metadata["eventMessage"])
+			stor.UpdateCanaryGateStatus(context.Background(), store.StoreKey{Namespace: canary.Namespace, Name: canary.Name}, string(canary.Phase), message)
 		}
 	}
-
 }
 
 func createMeta(canary CanaryWebhookPayload) map[string]string {
