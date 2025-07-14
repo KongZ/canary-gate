@@ -73,7 +73,7 @@ build-debug: build ## Build a binary with remote debugging capabilities
 .PHONY: docker
 docker: ## Build a canary-gate Docker image
 	@echo "Building architecture ${BUILD_ARCH}"
-	nerdctl build -t ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG} \
+	docker build -t ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG} \
 		--platform $(BUILD_ARCH) \
 		--build-arg=VERSION=$(VERSION) \
 		--build-arg=COMMIT_HASH=$(COMMIT_HASH) \
