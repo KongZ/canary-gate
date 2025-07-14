@@ -1,0 +1,29 @@
+apiVersion: piggysec.com/v1alpha1
+kind: CanaryGate
+metadata:
+  name: demo
+spec:
+  confirm-rollout: opened
+  pre-rollout: opened
+  rollout: opened
+  confirm-traffic-increase: opened
+  confirm-promotion: closed
+  post-rollout: opened
+  rollback: closed
+  target:
+    namespace: demo
+    name: demo
+  flagger:
+    targetRef:
+      apiVersion: apps/v1
+      kind: Deployment
+      name: demo
+    service:
+      port: 8080
+    skipAnalysis: false
+    analysis:
+      interval: 10s
+      threshold: 2
+      maxWeight: 20
+      stepWeight: 20
+      stepWeightPromotion: 100

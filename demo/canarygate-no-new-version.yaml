@@ -6,10 +6,10 @@ spec:
   confirm-rollout: closed
   pre-rollout: opened
   rollout: opened
-  confirm-traffic-increase: closed
-  confirm-promotion: closed
+  confirm-traffic-increase: opened
+  confirm-promotion: opened
   post-rollout: opened
-  rollback: opened
+  rollback: closed
   target:
     namespace: demo
     name: demo
@@ -27,9 +27,3 @@ spec:
       maxWeight: 40
       stepWeight: 10
       stepWeightPromotion: 100
-      # more dynamic and unpredictable fields in the future
-      # metrics:
-      #   - interval: 1m
-      #     name: cpu-usage
-      #     thresholdRange:
-      #       max: 5

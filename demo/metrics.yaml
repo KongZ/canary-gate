@@ -1,0 +1,25 @@
+apiVersion: flagger.app/v1beta1
+kind: MetricTemplate
+metadata:
+  name: envoy-error-rate
+  namespace: flagger
+spec:
+  provider:
+    address: https://api.datadoghq.com
+    secretRef:
+      name: datadog
+    type: datadog
+  query: |
+    100 * (sum:trace.envoy.proxy.errors{env:staging,service:core}.as_rate() / sum:trace.envoy.proxy.hits{env:staging,service:core}.as_rate())
+---
+apiVersion: flagger.app/v1beta1
+kind: MetricTemplate
+metadata:
+  name: cpu-usage
+spec:
+  provider:
+    type: prometheus
+    address: http://prometheus-server.prometheus.svc.cluster.local
+    insecureSkipVerify: true
+  query: |
+    sum(rate(container_cpu_usage_seconds_total{container!="",pod=~"demo.*"}[1m])) by (pod) * 100

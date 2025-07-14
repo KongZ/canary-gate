@@ -63,7 +63,7 @@ type ServiceFQDN struct {
 }
 
 // diagram is a string representation of the canary gate workflow diagram.
-const diagram = "   .─.        ┌───────────────┐                                 ┌──────────┐                     \n  (   )──────▶│confirm-rollout│───────open─────────────────────▶│ rollout  │◀───────┐            \n   `─'        └───────────────┘                 ┌──close────────└──────────┘        │            \n  deploy              │                         │                     │             │            \n                    close                       ▼                     │             │            \n                      │                        .─.                  open            │            \n                      ▼                       (   )                   │             │            \n                     .─.                       `─'                    ▼             │            \n                    (   )                     pause                  .─.            │            \n                     `─'     ┌──────────────────────────────────────(   )           │            \n                    pause    │                                       `─'            │            \n                           errors                                   check          .─.           \n                             │                                     metrics        (   ) increase \n                             │                                        │            `─'  traffic  \n                             │                                        │             ▲            \n                             │                                        ▼             │            \n                             │                               ┌────────────────┐     │            \n                             │            .─.                │confirm-traffic-│     │            \n                             │           (   )◀────close─────│    increase    │     │            \n                             │            `─'                └────────────────┘     │            \n                             │           pause                        │           close          \n                             │                                      open            │            \n                             │                                        │             │            \n                             ▼                                        ▼             │            \n                            .─.                                ┌────────────┐       │            \n                 rollback  (███)◀───────────────────open───────│  rollback  │───────┘            \n                            `─'                                └────────────┘                    \n                             ▲                                        │                          \n                             │                                    promoting                      \n                             │                                        │                          \n                             │                                        ▼                          \n                            .─.              .─.             ┌─────────────────┐                 \n                           (   )◀──errors───(   )◀──close────│confirm-promotion│                 \n                            `─'              `─'             └─────────────────┘                 \n                           check            pause                     │                          \n                          metrics                                   open                         \n                                                                      │                          \n                                                                      ▼                          \n                                                                     .─.                         \n                                                                    (███)                        \n                                                                     `─'                         \n                                                                   promote                       \n"
+const diagram = "   .─.        ┌───────────────┐                                 ┌──────────┐                     \n  (   )──────▶│confirm-rollout│───────open─────────────────────▶│ rollout  │◀───────┐            \n   `─'        └───────────────┘                 ┌──close────────└──────────┘        │            \n  deploy              │                         │                     │             │            \n                    close                       ▼                     │             │            \n                      │                        .─.                  open            │            \n                      ▼                       (   )                   │             │            \n                     .─.                       `─'                    ▼             │            \n                    (   )                     pause                  .─.            │            \n                     `─'     ┌──────────────────────────────────────(   )           │            \n                    pause    │                                       `─'            │            \n                           errors                                   check          .─.           \n                             │                                     metrics        (   ) increase \n                             │                                        │            `─'  traffic  \n                             │                                        │             ▲            \n                             │                                        ▼             │            \n                             │                               ┌────────────────┐     │            \n                             │            .─.                │confirm-traffic-│     │            \n                             │           (   )◀────close─────│    increase    │     │            \n                             │            `─'                └────────────────┘     │            \n                             │           pause                        │           close          \n                             │                                      open            │            \n                             │                                        │             │            \n                             ▼                                        ▼             │            \n                            .─.                                ┌────────────┐       │            \n                 rollback  ( ● )◀───────────────────open───────│  rollback  │───────┘            \n                            `─'                                └────────────┘                    \n                             ▲                                        │                          \n                             │                                    promoting                      \n                             │                                        │                          \n                             │                                        ▼                          \n                            .─.              .─.             ┌─────────────────┐                 \n                           (   )◀──errors───(   )◀──close────│confirm-promotion│                 \n                            `─'              `─'             └─────────────────┘                 \n                           check            pause                     │                          \n                          metrics                                   open                         \n                                                                      │                          \n                                                                      ▼                          \n                                                                     .─.                         \n                                                                    ( ● )                        \n                                                                     `─'                         \n                                                                   promote                       \n"
 
 const serviceLabel = "app=canary-gate"
 const servicePortName = "http"
@@ -111,32 +111,20 @@ func createCliApp() *cli.Command {
 		Usage: "A CLI tool to interact with canary gate in the Flagger",
 		UsageText: `canary-gate [command] <gate-name> <global-options>
 
-Example: canary-gate open confirm-rollout --cluster-alias my-cluster --namespace gate-namespace  --deployment my-deployment
+		Example: 
+# CanaryGate is located within the 'gate-namespace' namespace, with the name 'my-deployment' on the 'my-cluster' cluster.
 
-The example command will look for a canary gate configuration named 'my-deployment' under 'gate-namespace' namespace in the 'my-cluster' cluster and open the 'confirm-rollout' gate for that deployment.
+# Open the confirm-rollout gate. 
+canary-gate open confirm-rollout --cluster my-cluster --namespace gate-namespace --deployment my-deployment
 
-apiVersion: piggysec.com/v1alpha1
-kind: CanaryGate
-metadata:
-  name: demo
-	namespace: gate-namespace
-spec:
-  confirm-rollout: opened
-  target:
-    namespace: demo
-    name: demo
-  flagger:
-    targetRef:
-      apiVersion: apps/v1
-      kind: Deployment
-      name: demo
-    skipAnalysis: false
-    analysis:
-      interval: 10s
-      threshold: 2
-      maxWeight: 50
-      stepWeight: 10
-`,
+# Close the confirm-promotion gate. 
+canary-gate close confirm-promotion --cluster my-cluster --namespace gate-namespace --deployment my-deployment
+
+# Check the status of the confirm-traffic-increase gate.
+canary-gate status confirm-traffic-increase --cluster my-cluster --namespace gate-namespace --deployment my-deployment
+
+# Check the status of all gates.
+canary-gate status all --cluster my-cluster --namespace gate-namespace --deployment my-deployment`,
 		Description: "This tool allows you to open, close, and check the status of canary gate in the Flagger.\n" +
 			"It interacts with the canary-gate service running in the cluster to manage canary deployments.\n" +
 			"Visits https://github.com/KongZ/canary-gate for more information.",
@@ -147,7 +135,11 @@ spec:
 				Usage: "Open a canary gate.",
 				UsageText: `canary-gate open <gate-name> <global-options>
 
-Example: canary-gate open confirm-rollout --cluster my-cluster --namespace gate-namespace --deployment my-deployment`,
+Example: 
+# CanaryGate is located within the 'gate-namespace' namespace, with the name 'my-deployment' on the 'my-cluster' cluster.
+
+# Open the confirm-rollout gate. 
+canary-gate open confirm-rollout --cluster my-cluster --namespace gate-namespace --deployment my-deployment`,
 				Flags: flags,
 				Commands: []*cli.Command{
 					{
@@ -215,7 +207,11 @@ Example: canary-gate open confirm-rollout --cluster my-cluster --namespace gate-
 				Usage: "Close a canary gate.",
 				UsageText: `canary-gate close <gate-name> <global-options>
 
-Example: canary-gate close confirm-rollout --cluster my-cluster --namespace gate-namespace --deployment my-deployment`,
+Example: 
+# CanaryGate is located within the 'gate-namespace' namespace, with the name 'my-deployment' on the 'my-cluster' cluster.
+
+# Close the confirm-rollout gate. 
+canary-gate close confirm-rollout --cluster my-cluster --namespace gate-namespace --deployment my-deployment`,
 				Flags: flags,
 				Commands: []*cli.Command{
 					{
@@ -283,7 +279,14 @@ Example: canary-gate close confirm-rollout --cluster my-cluster --namespace gate
 				Usage: "Check status of a canary gate.",
 				UsageText: `canary-gate status <gate-name> <global-options>
 
-Example: canary-gate status confirm-rollout --cluster my-cluster --namespace gate-namespace --deployment my-deployment`,
+Example: 
+# CanaryGate is located within the 'gate-namespace' namespace, with the name 'my-deployment' on the 'my-cluster' cluster..
+
+# Check the status of a specific gate. 
+canary-gate status confirm-rollout --cluster my-cluster --namespace gate-namespace --deployment my-deployment
+
+# Check the status of a all gates
+canary-gate status all --cluster my-cluster --namespace gate-namespace --deployment my-deployment`,
 				Flags: flags,
 				Commands: []*cli.Command{
 					{
@@ -360,26 +363,33 @@ Example: canary-gate status confirm-rollout --cluster my-cluster --namespace gat
 				UsageText: "View the diagram and explain how of canary gate work",
 				Description: "Displays the diagram of the canary gate workflow, showing how each gate work with open/close command.\n\n" +
 					diagram + `
-Gated canary promotion stages:
-* Scan for canary deployments
-* Check confirm-rollout gate
-  * halt advancement is the gate is closed
-* Check pre-rollout gate (This stage is hidden on the diagram)
-  * halt advancement is the gate is closed
-* Increase canary traffic (step weight or iteration)
-	* Check rollout gate
-		* If gate is open, continue checking metrics
-	* Check canary metrics (If enabled)
-		* Halt advancement if any metric is under the specified threshold
-		* Scale new deployment to zero if the number of failed checks reached the threshold
-	* Check confirm-traffic-increase gate
-		* If gate is open, increase canary traffic weight (step weight) till it reaches (max weight)
-* Check confirm-promotion gate
-  * Halt advancement if gate is closed
-	* If gate is open, copy canary deployment spec template over primary
-* Check post-rollout gate when canary has been promoted or rolled back
-	* Halt advancement if gate is closed
-* If rollout gate is opened, rollback the canary deployment anytime during the canary promotion process.
+Each gate controls the flow of the Flagger Canary process.
+
+1. When a new version is detected, it will check the <confirm-rollout> gate.
+   * If the gate is open, it will proceed to the next stage.
+   * If the gate is closed, it will halt the process and wait until the gate is opened.
+
+2. Next, it will check the <pre-rollout> gate. This stage is not depicted in the diagram.
+   * If the gate is open, it will proceed to the next stage.
+   * If the gate is closed, it will halt the process and wait until the gate is opened.
+
+3. Flagger will begin increasing traffic based on the configuration in CanaryGate. Before each traffic increase, it will check the <rollout> and <confirm-traffic-increase> gates.
+   * If <rollout> is open, it will proceed to the next stage.
+   * If <rollout> is closed, it will halt the process and continue monitoring metrics. If metrics indicate failure, it will initiate a rollback.
+   * If <confirm-traffic-increase> is open, it will continue to increase traffic and proceed to the next stage.
+   * If <confirm-traffic-increase> is closed, it will halt the process.
+
+4. After increasing traffic until it reaches the maximum weight, it will check the <confirm-promotion> gate.
+   * If the gate is open, it will proceed to promote to the new version.
+   * If the gate is closed, it will halt the process and continue monitoring metrics. If metrics indicate failure, it will initiate a rollback.
+
+5. Flagger will copy the canary deployment specification template over to the primary. After promotion is finalized, the <post-rollout> gate is checked. This stage is not depicted in the diagram.
+   * If the gate is open, the process is completed.
+   * If the gate is closed, the process is pending finalization.
+
+6. The <rollback> gate is continuously monitored throughout the process.
+   * If the gate is open, the rollback process is initiated.
+   * If the gate is closed, the rollout process continues.
 
 Example of canarygate CRD file:
 
@@ -405,7 +415,7 @@ spec:
       maxWeight: 50
       stepWeight: 10
 
-The configuration above will create the Flagger Canary on the 'demons' namespace with the name 'demo' and it will copy all configuration under 'flagger' field to Flagger Canary. After that the Flagger Canary will be monitored by the canary-gate controller and if CanaryGate is modified, the controller will update the Flagger Canary accordingly.
+The configuration described will set up the Flagger Canary within the 'demons' namespace, identified by the name 'demo'. It will duplicate all configurations located under the 'flagger' field to the Flagger Canary. Following this, the Flagger Canary will be managed by the canary-gate controller; if the CanaryGate is altered, the controller will adjust the Flagger Canary as needed.
 `,
 			},
 		},
@@ -533,7 +543,7 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 	if statusMap, err := readPayload(rawBody, map[string][]handler.CanaryGateStatus{}); err != nil {
 		return fmt.Errorf("failed to read response payload: %w", err)
 	} else {
-		for k, v := range *statusMap {
+		for _, v := range *statusMap {
 			pad := "%-25s"
 			if len(v) == 1 {
 				pad = "%s"
@@ -542,7 +552,7 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 				log.Info().
 					Str("gate", fmt.Sprintf(pad, string(s.Type))).
 					Str("status", string(s.Status)).
-					Msgf("Canary Gate Status for [%s]", k)
+					Msgf("Canary Gate Status for [%s]", s.Name)
 			}
 		}
 	}

@@ -1,3 +1,18 @@
+###############################################################################
+# Copyright 2025 The canary-gate authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# 	http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+###############################################################################
 # Project variables
 PACKAGE = github.com/KongZ/canary-gate
 DOCKER_REGISTRY ?= ghcr.io/kongz
@@ -33,6 +48,22 @@ build: ## Build all binaries
 	@staticcheck -f stylish -fail -U1000 ./...
 	@echo "\033[0;33m\n👮‍♀️ Running Gosec..."
 	@gosec ./...
+	@echo "\033[0m"
+
+.PHONY: build-cli
+build-cli: ## Build all cli binaries
+	@echo "\033[0;31m\n🚜 Building canary-gate-cli (linux/amd64)..."
+	@mkdir -p bin/linux/amd64
+	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/linux/amd64/canary-gate cli/main.go
+	@echo "\033[0;31m\n🚜 Building canary-gate-cli (windows/386)..."
+	@mkdir -p bin/win/386
+	@GOOS=windows GOARCH=386 CGO_ENABLED=0 go build -o bin/win/386canary-gate.exe cli/main.go
+	@echo "\033[0;31m\n🚜 Building canary-gate-cli (darwin/amd64)..."
+	@mkdir -p bin/darwin/amd64
+	@GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o bin/darwin/amd64/canary-gate cli/main.go
+	@echo "\033[0;31m\n🚜 Building canary-gate-cli (darwin/arm64)..."
+	@mkdir -p bin/darwin/arm64
+	@GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o bin/darwin/arm64/canary-gate cli/main.go
 	@echo "\033[0m"
 
 .PHONY: build-debug
