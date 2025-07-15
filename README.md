@@ -1,8 +1,8 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Action](https://github.com/KongZ/piggy/workflows/Build%20to%20GHCR/badge.svg?branch=main)](https://github.com/KongZ/piggy/actions)
-[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/piggy)](https://artifacthub.io/packages/search?repo=piggy)
+[![Build](https://github.com/KongZ/canary-gate/actions/workflows/pull_request.yml/badge.svg)](https://github.com/KongZ/canary-gate/actions/workflows/pull_request.yml)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/canary-gate)](https://artifacthub.io/packages/search?repo=canary-gate)
 
-![canary-gate logo](https://raw.githubusercontent.com/KongZ/piggy/main/docs/images/piggy.png "Canary Gate logo")
+![canary-gate logo](https://raw.githubusercontent.com/KongZ/canary-gate/main/docs/gopher-canary-gate.png "Canary Gate logo")
 
 # Canary Gate
 
