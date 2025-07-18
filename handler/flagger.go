@@ -90,98 +90,46 @@ func StoreKey(canary *CanaryWebhookPayload, hook service.HookType) string {
 // ConfirmRollout hooks are executed before scaling up the canary deployment and can be used for manual approval. The rollout is paused until the  returns a successful HTTP status code.
 func (h *FlaggerHandler) ConfirmRollout() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		canary, err := readPayload(r, CanaryWebhookPayload{})
-		if err != nil {
-			badRequest(w, err)
-			return
-		}
-		h.logEvent(service.HookConfirmRollout, canary)
-		if h.noti == nil {
-			if _, err := h.noti.SendMessages("Please confirm rollout action", service.HookConfirmRollout, createMeta(*canary)); err != nil {
-				log.Error().Msgf("Error while sending message %v", err)
+		if canary, err := readPayload(r, w, CanaryWebhookPayload{}); err == nil {
+			h.logEvent(service.HookConfirmRollout, canary)
+			if h.noti != nil {
+				if _, err := h.noti.SendMessages("Please confirm rollout action", service.HookConfirmRollout, createMeta(*canary)); err != nil {
+					log.Error().Msgf("Error while sending message %v", err)
+				}
 			}
+			h.responseWebhook(w, canary, service.HookConfirmRollout)
 		}
-		h.responseWebhook(w, canary, service.HookConfirmRollout)
 	})
 }
 
 // PreRollout hooks are executed before routing traffic to canary. The canary advancement is paused if a pre-rollout  fails and if the number of failures reach the threshold the canary will be rollback
 func (h *FlaggerHandler) PreRollout() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		canary, err := readPayload(r, CanaryWebhookPayload{})
-		if err != nil {
-			badRequest(w, err)
-			return
-		}
-		h.logEvent(service.HookPreRollout, canary)
-		h.responseWebhook(w, canary, service.HookPreRollout)
-	})
+	return h.createGateHandler(service.HookPreRollout)
 }
 
 // Rollout hooks are executed during the analysis on each iteration before the metric checks. If a rollout call fails the canary advancement is paused and eventfully rolled back.
 func (h *FlaggerHandler) Rollout() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		canary, err := readPayload(r, CanaryWebhookPayload{})
-		if err != nil {
-			badRequest(w, err)
-			return
-		}
-		h.logEvent(service.HookRollout, canary)
-		h.responseWebhook(w, canary, service.HookRollout)
-	})
+	return h.createGateHandler(service.HookRollout)
 }
 
 // ConfirmTrafficIncrease hooks are executed right before the weight on the canary is increased. The canary advancement is paused until this returns HTTP 200.
 func (h *FlaggerHandler) ConfirmTrafficIncrease() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		canary, err := readPayload(r, CanaryWebhookPayload{})
-		if err != nil {
-			badRequest(w, err)
-			return
-		}
-		h.logEvent(service.HookConfirmTrafficIncrease, canary)
-		h.responseWebhook(w, canary, service.HookConfirmTrafficIncrease)
-	})
+	return h.createGateHandler(service.HookConfirmTrafficIncrease)
 }
 
 // ConfirmPromotion hooks are executed before the promotion step. The canary promotion is paused until the hooks return HTTP 200. While the promotion is paused, Flagger will continue to run the metrics checks and rollout hooks.
 func (h *FlaggerHandler) ConfirmPromotion() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		canary, err := readPayload(r, CanaryWebhookPayload{})
-		if err != nil {
-			badRequest(w, err)
-			return
-		}
-		h.logEvent(service.HookConfirmPromotion, canary)
-		h.responseWebhook(w, canary, service.HookConfirmPromotion)
-	})
+	return h.createGateHandler(service.HookConfirmPromotion)
 }
 
 // PostRollout hooks are executed after the canary has been promoted or rolled back. If a post rollout  fails the error is logged.
 func (h *FlaggerHandler) PostRollout() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		canary, err := readPayload(r, CanaryWebhookPayload{})
-		if err != nil {
-			badRequest(w, err)
-			return
-		}
-		h.logEvent(service.HookPostRollout, canary)
-		h.responseWebhook(w, canary, service.HookPostRollout)
-	})
+	return h.createGateHandler(service.HookPostRollout)
 }
 
 // Rollback hooks are executed while a canary deployment is in either Progressing or Waiting status. This provides the ability to rollback during analysis or while waiting for a confirmation. If a rollback  returns a successful HTTP status code, Flagger will stop the analysis and mark the canary release as failed.
 func (h *FlaggerHandler) Rollback() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		canary, err := readPayload(r, CanaryWebhookPayload{})
-		if err != nil {
-			badRequest(w, err)
-			return
-		}
-		h.logEvent(service.HookRollback, canary)
-		h.responseWebhook(w, canary, service.HookRollback)
-		// w.WriteHeader(http.StatusForbidden)
-	})
+	return h.createGateHandler(service.HookRollback)
 }
 
 func NewHandler(cmd *cli.Command, noti noti.Client, store store.Store) FlaggerHandler {
@@ -196,71 +144,68 @@ func NewHandler(cmd *cli.Command, noti noti.Client, store store.Store) FlaggerHa
 // Event hooks are executed every time Flagger emits a Kubernetes event. When configured, every action that Flagger takes during a canary deployment will be sent as JSON via an HTTP POST request
 func (h *FlaggerHandler) Event() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		canary, err := readPayload(r, CanaryWebhookPayload{})
-		if err != nil {
-			badRequest(w, err)
-			return
+		if canary, err := readPayload(r, w, CanaryWebhookPayload{}); err == nil {
+			h.logEvent(service.HookEvent, canary)
+			// h.noti.SendMessages()
 		}
-		h.logEvent(service.HookEvent, canary)
-		// h.noti.SendMessages()
 	})
 }
 
 // OpenGate set gate open
 func (h *FlaggerHandler) OpenGate() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gate, err := readPayload(r, CanaryGatePayload{})
-		if err != nil {
-			badRequest(w, err)
-			return
+		if gate, err := readPayload(r, w, CanaryGatePayload{}); err == nil {
+			h.store.GateOpen(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
+			h.responseAPI(w, gate, store.GATE_OPEN)
 		}
-		h.store.GateOpen(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
-		h.responseAPI(w, gate, store.GATE_OPEN)
 	})
 }
 
 // CloseGate set gate close
 func (h *FlaggerHandler) CloseGate() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gate, err := readPayload(r, CanaryGatePayload{})
-		if err != nil {
-			badRequest(w, err)
-			return
+		if gate, err := readPayload(r, w, CanaryGatePayload{}); err == nil {
+			h.store.GateClose(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
+			h.responseAPI(w, gate, store.GATE_CLOSE)
 		}
-		h.store.GateClose(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gate.Type})
-		h.responseAPI(w, gate, store.GATE_CLOSE)
 	})
 }
 
 // StatusGate get gate status
 func (h *FlaggerHandler) StatusGate() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gate, err := readPayload(r, CanaryGatePayload{})
-		if err != nil {
-			badRequest(w, err)
-			return
-		}
-		var gateTypes []service.HookType
-		if gate.Type == service.HookAll {
-			gateTypes = []service.HookType{
-				service.HookConfirmRollout,
-				service.HookPreRollout,
-				service.HookRollout,
-				service.HookConfirmTrafficIncrease,
-				service.HookConfirmPromotion,
-				service.HookPostRollout,
-				service.HookRollback,
+		if gate, err := readPayload(r, w, CanaryGatePayload{}); err == nil {
+			var gateTypes []service.HookType
+			if gate.Type == service.HookAll {
+				gateTypes = []service.HookType{
+					service.HookConfirmRollout,
+					service.HookPreRollout,
+					service.HookRollout,
+					service.HookConfirmTrafficIncrease,
+					service.HookConfirmPromotion,
+					service.HookPostRollout,
+					service.HookRollback,
+				}
+			} else {
+				gateTypes = []service.HookType{gate.Type}
 			}
-		} else {
-			gateTypes = []service.HookType{gate.Type}
+			gateResponseMap := make(map[string][]CanaryGateStatus)
+			for _, gt := range gateTypes {
+				status := store.GateStatus(h.store.IsGateOpen(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gt}))
+				log.Debug().Msgf("%s %s=%s", h.createKey(gate.Namespace, gate.Name), gt, status)
+				h.createResponse(gateResponseMap, gate.Namespace, gate.Name, gt, status)
+			}
+			writePayload(w, &gateResponseMap, http.StatusOK)
 		}
-		gateResponseMap := make(map[string][]CanaryGateStatus)
-		for _, gt := range gateTypes {
-			status := store.GateStatus(h.store.IsGateOpen(store.StoreKey{Namespace: gate.Namespace, Name: gate.Name, Type: gt}))
-			log.Debug().Msgf("%s %s=%s", h.createKey(gate.Namespace, gate.Name), gt, status)
-			h.createResponse(gateResponseMap, gate.Namespace, gate.Name, gt, status)
+	})
+}
+
+func (h *FlaggerHandler) createGateHandler(hookType service.HookType) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if canary, err := readPayload(r, w, CanaryWebhookPayload{}); err == nil {
+			h.logEvent(hookType, canary)
+			h.responseWebhook(w, canary, hookType)
 		}
-		writePayload(w, &gateResponseMap, http.StatusOK)
 	})
 }
 
@@ -338,14 +283,20 @@ func badRequest(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusBadRequest)
 }
 
-func readPayload[I any](r *http.Request, i I) (*I, error) {
+func readPayload[I any](r *http.Request, w http.ResponseWriter, i I) (*I, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		badRequest(w, err)
 		return &i, err
 	}
-	defer r.Body.Close()
+	defer func() {
+		if err := r.Body.Close(); err != nil {
+			log.Error().Msgf("Error while closing request body %v", err)
+		}
+	}()
 	err = json.Unmarshal(body, &i)
 	if err != nil {
+		badRequest(w, err)
 		return &i, err
 	}
 	return &i, nil
@@ -356,6 +307,7 @@ func writePayload[I any](w http.ResponseWriter, payload *I, status int) {
 	if err != nil {
 		log.Error().Msgf("Error while read payload %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	writeBytes(w, r, status)
 }

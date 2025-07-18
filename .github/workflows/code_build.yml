@@ -38,8 +38,10 @@ jobs:
 
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
+        env:
+          GOROOT: ""
         with:
-          args: '-no-fail ./...'
+          args: " -no-fail ./..."
 
       - name: Build
         run: go build -v ./...
@@ -57,4 +59,4 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           min-coverage-overall: 40
           min-coverage-changed-files: 40
-          pass-emoji: '✅'
+          pass-emoji: "✅"

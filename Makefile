@@ -102,7 +102,7 @@ docker-multi-push: ## Build a canary-gate Docker image in multi-architect and pu
 		--build-arg=COMMIT_HASH=$(COMMIT_HASH) \
 		--build-arg=BUILD_DATE=$(BUILD_DATE) \
 		-f Dockerfile .
-	nerdctl push ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG}
+	nerdctl push --all-platforms ${CANARY_GATE_DOCKER_IMAGE}:${DOCKER_TAG}
 
 release-%: ## Release a new version
 	git tag -m 'Release $*' $*

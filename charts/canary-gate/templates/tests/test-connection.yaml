@@ -8,8 +8,8 @@ metadata:
     "helm.sh/hook": test
 spec:
   containers:
-    - name: wget
-      image: busybox
-      command: ['wget']
-      args: ['{{ include "canary-gate.fullname" . }}:{{ .Values.service.port }}']
+    - name: curl
+      image: alpine/curl:8.14.1
+      command: [ "/bin/sh", "-c" ]
+      args: [ "curl -s 'http://{{ include "canary-gate.fullname" . }}:{{ .Values.service.port }}/version' | grep 'version'" ]
   restartPolicy: Never

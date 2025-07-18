@@ -44,14 +44,14 @@ jobs:
           echo "value=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
       - name: Login to ghcr
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v2
+        uses: docker/login-action@@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build canary-gate server and push
         id: docker_canary-gate
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           build-args: |
@@ -65,8 +65,7 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
       - name: canary-gate digest
         run: echo ${{ steps.docker_canary-gate.outputs.digest }}
-      -
-        # Temp fix
+      - # Temp fix
         # https://github.com/docker/build-push-action/issues/252
         # https://github.com/moby/buildkit/issues/1896
         name: Move cache

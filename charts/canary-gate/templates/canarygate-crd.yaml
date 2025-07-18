@@ -1,4 +1,4 @@
-{{- if and .Values.crd.create (eq .Values.store.type "crd") -}}
+{{- if and .Values.crd.create (eq .Values.store.type "crd") }}
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -16,8 +16,8 @@ spec:
             spec:
               type: object
               required:
-              - flagger
-              - target
+                - flagger
+                - target
               properties:
                 confirm-rollout:
                   type: string
@@ -33,16 +33,16 @@ spec:
                   type: string
                 rollback:
                   type: string
-                target: 
+                target:
                   type: object
                   required:
-                  - namespace
-                  - name
+                    - namespace
+                    - name
                   properties:
                     namespace:
                       type: string
                     name:
-                      type: string                   
+                      type: string
                 flagger:
                   description: Contains the raw spec for the Flagger Canary resource.
                   type: object
@@ -51,39 +51,39 @@ spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
       additionalPrinterColumns:
-      - name: Target
-        type: string
-        description: The name of the Flagger Canary target
-        jsonPath: .status.target
-      - name: Status
-        type: string
-        description: The current phase of the CanaryGate
-        jsonPath: .status.status
-      - name: Confirm-rollout
-        type: string
-        description: The current confirm-rollout gate status
-        jsonPath: .spec.confirm-rollout
-        priority: 1
-      - name: Confirm-traffic-increase
-        type: string
-        description: The current confirm-traffic-increase gate status
-        jsonPath: .spec.confirm-traffic-increase
-        priority: 1
-      - name: Confirm-promotion
-        type: string
-        description: The current confirm-promotion gate status
-        jsonPath: .spec.confirm-promotion
-        priority: 1
-      - name: Rollback
-        type: string
-        description: The current rollback gate status
-        jsonPath: .spec.rollback
-        priority: 1
+        - name: Target
+          type: string
+          description: The name of the Flagger Canary target
+          jsonPath: .status.target
+        - name: Status
+          type: string
+          description: The current phase of the CanaryGate
+          jsonPath: .status.status
+        - name: Confirm-rollout
+          type: string
+          description: The current confirm-rollout gate status
+          jsonPath: .spec.confirm-rollout
+          priority: 1
+        - name: Confirm-traffic-increase
+          type: string
+          description: The current confirm-traffic-increase gate status
+          jsonPath: .spec.confirm-traffic-increase
+          priority: 1
+        - name: Confirm-promotion
+          type: string
+          description: The current confirm-promotion gate status
+          jsonPath: .spec.confirm-promotion
+          priority: 1
+        - name: Rollback
+          type: string
+          description: The current rollback gate status
+          jsonPath: .spec.rollback
+          priority: 1
   scope: Namespaced
   names:
     plural: canarygates
     singular: canarygate
     kind: CanaryGate
     shortNames:
-    - cg
+      - cg
 {{- end }}

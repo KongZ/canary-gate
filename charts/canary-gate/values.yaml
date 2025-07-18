@@ -6,9 +6,9 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/kongz/canary-gate
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "0700386-dirty"
+  tag: "latest"
 
 imagePullSecrets:
   - name: ghcr
@@ -41,7 +41,7 @@ podSecurityContext: {}
 securityContext:
   capabilities:
     drop:
-    - ALL
+      - ALL
   readOnlyRootFilesystem: true
   runAsNonRoot: true
   runAsUser: 10001
@@ -92,7 +92,7 @@ autoscaling:
   minReplicas: 1
   maxReplicas: 100
   targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 60
 
 # Additional volumes on the output Deployment definition.
 volumes: []
@@ -113,6 +113,5 @@ tolerations: []
 
 affinity: {}
 
-store: 
+store:
   type: "crd"
-
