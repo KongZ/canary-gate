@@ -5,22 +5,51 @@ on:
     tags:
       - "[0-9]+.[0-9]+.[0-9]+"
 
+env:
+  REGISTRY_IMAGE: ghcr.io/kongz/canary-gate
+  REGISTRY_CHART: ghcr.io/kongz/helm-charts
+
 jobs:
-  release:
+  release-image:
     runs-on: ubuntu-latest
     permissions:
       packages: write
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Configure Git
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+      - name: Set up Docker
+        uses: docker/setup-docker-action@v4
+        with:
+          daemon-config: |
+            {
+              "debug": true,
+              "features": {
+                "containerd-snapshotter": true
+              }
+            }
+
+      - name: Docker login
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
 
       - name: Set up QEMU
         id: qemu
@@ -28,60 +57,75 @@ jobs:
         with:
           image: tonistiigi/binfmt:latest
           platforms: all
+
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@v3
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-      - name: Get version
-        id: version
-        run: |
-          echo "value=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-      - name: Login to ghcr
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build canary-gate server and push
         id: docker_canary-gate
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
-          context: ./
+          context: .
+          file: ./Dockerfile
           build-args: |
             VERSION=${{ steps.version.outputs.value }}
-          file: ./Dockerfile
-          builder: ${{ steps.buildx.outputs.name }}
-          platforms: linux/amd64,linux/arm64
+            COMMIT_HASH=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+          load: true
+          platforms: ${{ matrix.platform }}
           push: true
-          tags: ghcr.io/kongz/canary-gate:${{ steps.version.outputs.value }},ghcr.io/kongz/canary-gate:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
-      - name: canary-gate digest
-        run: echo ${{ steps.docker_canary-gate.outputs.digest }}
-      -
-        # Temp fix
-        # https://github.com/docker/build-push-action/issues/252
-        # https://github.com/moby/buildkit/issues/1896
-        name: Move cache
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          tags: |
+            ${{ env.REGISTRY_IMAGE }}:${{ github.sha }}
+            ${{ env.REGISTRY_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  chart-release:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
           version: v3.13.0
 
-      - name: Run chart-releaser
+      - name: Install chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
         with:
-          charts_dir: charts
+          install_only: true
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Pack Charts
+        run: |
+          rm -rf .cr-release-packages
+          mkdir -p .cr-release-packages
+          cr package charts/canary-gate --package-path .cr-release-packages
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: GHCR login
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Charts to GHCR
+        run: |
+          for pkg in .cr-release-packages/*; do
+            if [ -z "${pkg:-}" ]; then
+              break
+            fi
+            helm push "${pkg}" oci://${{ env.REGISTRY_CHART }}
+          done
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"

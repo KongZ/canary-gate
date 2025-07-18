@@ -79,7 +79,6 @@ func main() {
 	cmd := &cli.Command{
 		Name:        "canary-gate",
 		Action:      launchServer,
-		Version:     "0.1",
 		Usage:       "Launches Canary Gate for Flagger",
 		HideVersion: true,
 		Flags: []cli.Flag{
@@ -229,6 +228,7 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 
 	listenAddress := cmd.String(flagListenAddress)
 	mux := http.NewServeMux()
+	serverHandler := handler.ServerHandler{}
 	handler := handler.NewHandler(cmd, slack, stor)
 	mux.Handle("/confirm-rollout", handler.ConfirmRollout())
 	mux.Handle("/pre-rollout", handler.PreRollout())
@@ -242,6 +242,7 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 	mux.Handle("/close", handler.CloseGate())
 	mux.Handle("/status", handler.StatusGate())
 	mux.Handle("/metrics", promhttp.Handler())
+	mux.Handle("/version", serverHandler.Version())
 	// Note: The health check endpoints are merged with the controller manager.
 	ch := make(chan struct{})
 	server := http.Server{

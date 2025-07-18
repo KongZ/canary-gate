@@ -87,7 +87,7 @@ func messageBlocks(text string, header string, meta map[string]string) slack.Msg
 	for c, k := range keys {
 		fields[c] = slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*%s*\n%s", k, meta[k]), false, false)
 	}
-	// TODO this should be change to randome ID but we need to store the ID in storage
+	// TODO this should be change to random ID but we need to store the ID in storage
 	action := fmt.Sprintf("%s:%s:%s", meta[service.MetaCluster], meta[service.MetaNamespace], meta[service.MetaName])
 	blocks := []slack.Block{
 		slack.NewHeaderBlock(slack.NewTextBlockObject(slack.PlainTextType, header, true, false)),

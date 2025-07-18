@@ -21,6 +21,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+const cliVersion = "0.1.1"
+
 // main is the entry point of the application.
 func main() {
 	// Setup structured, human-friendly logging.
@@ -418,6 +420,30 @@ spec:
 The configuration described will set up the Flagger Canary within the 'demons' namespace, identified by the name 'demo'. It will duplicate all configurations located under the 'flagger' field to the Flagger Canary. Following this, the Flagger Canary will be managed by the canary-gate controller; if the CanaryGate is altered, the controller will adjust the Flagger Canary as needed.
 `,
 			},
+			{
+				Name:      "version",
+				Usage:     "Display the version of the canary-gate CLI and exit",
+				UsageText: "Display the version of the canary-gate CLI and exit",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "cluster",
+						Aliases:  []string{"c"},
+						Usage:    "The alias of the Kubernetes cluster to use (as defined in your kubeconfig)",
+						Required: false,
+					},
+					&cli.StringFlag{
+						Name:     "namespace",
+						Aliases:  []string{"n"},
+						Usage:    "The namespace where the CanaryGate resources is located",
+						Required: false,
+					},
+				},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					log.Info().Msg("For more information, visit https://github.com/KongZ/canary-gate")
+					log.Info().Str("version", cliVersion).Msg("canary-gate CLI version")
+					return serverVersion(ctx, c)
+				},
+			},
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
@@ -481,24 +507,116 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 	//  Load Kubernetes Configuration
 	clientset, err := loadKubernetesConfig(clusterAlias)
 	if err != nil {
+		return err
+	}
+
+	proxyPath, err := findProxyPath(ctx, clientset, namespace, method, canaryPath)
+	if err != nil {
+		return err
+	}
+
+	// Print the Response
+	var statusMap *map[string][]handler.CanaryGateStatus
+	if statusMap, err = requestAndRead(ctx, clientset, method, proxyPath, payload, map[string][]handler.CanaryGateStatus{}); err != nil {
+		return err
+	}
+	for _, v := range *statusMap {
+		pad := "%-25s"
+		if len(v) == 1 {
+			pad = "%s"
+		}
+		for _, s := range v {
+			log.Info().
+				Str("gate", fmt.Sprintf(pad, string(s.Type))).
+				Str("status", s.Status).
+				Msgf("Canary Gate Status for [%s]", s.Name)
+		}
+	}
+	return nil
+}
+
+// serverVersion get the server version of the canary gate service.
+func serverVersion(ctx context.Context, cmd *cli.Command) error {
+	clusterAlias := cmd.String("cluster")
+	if clusterAlias == "" {
+		return fmt.Errorf("cluster name is required")
+	}
+	namespace := cmd.String("namespace")
+	if namespace == "" {
+		namespace = defaultNamespace
+		log.Debug().Msgf("Namespace is not specified, using default namespace '%s'", defaultNamespace)
+	}
+	method := "GET"
+	path := "/version"
+
+	log.Debug().
+		Str("cluster", clusterAlias).
+		Str("action", path).
+		Str("namespace", namespace).
+		Msg("Starting operation")
+
+	//  Load Kubernetes Configuration
+	clientset, err := loadKubernetesConfig(clusterAlias)
+	if err != nil {
 		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
+
+	proxyPath, err := findProxyPath(ctx, clientset, namespace, method, path)
+	if err != nil {
+		return err
+	}
+
+	// Print the Response
+	var v *handler.ServerVersion
+	if v, err = requestAndRead(ctx, clientset, method, proxyPath, "", handler.ServerVersion{}); err != nil {
+		return fmt.Errorf("failed to read response payload: %w", err)
+	}
+	log.Info().
+		Str("version", v.Version).
+		Msg("Canary Gate Server Version")
+	return nil
+}
+
+// requestAndRead a shortcut function to send a request and read the response payload.
+func requestAndRead[P any, R any](ctx context.Context, clientset *kubernetes.Clientset, method string, proxyPath string, payload P, response R) (*R, error) {
+	// Use AbsPath to set the full path for the request, bypassing the builder.
+	req := clientset.CoreV1().RESTClient().Verb(method).AbsPath(proxyPath)
+	req.Body(writePayload(&payload))
+	req.SetHeader("Content-Type", "application/json")
+
+	// Execute the request and get the raw result.
+	result := req.Do(ctx)
+	if err := result.Error(); err != nil {
+		return new(R), fmt.Errorf("request to pod proxy failed: %w", err)
+	}
+
+	// Get the raw response body.
+	rawBody, err := result.Raw()
+	if err != nil {
+		return new(R), fmt.Errorf("failed to get raw response from proxy: %w", err)
+	}
+	// Print the Response
+	return readPayload(rawBody, response)
+}
+
+// findProxyPath constructs the path to the Kubernetes API server proxy for the specified service and canary path.
+func findProxyPath(ctx context.Context, clientset *kubernetes.Clientset, namespace string, method string, canaryPath string) (string, error) {
 	// Find service by label
 	service, err := findServiceByLabel(clientset, namespace, serviceLabel)
 	if err != nil {
-		return fmt.Errorf("failed to find service with label '%s' in namespace '%s'", serviceLabel, namespace)
+		return "", fmt.Errorf("failed to find service with label '%s' in namespace '%s'", serviceLabel, namespace)
 	}
 
 	// Find a Pod for the Service
 	canaryPod, err := findRunningPod(ctx, clientset, namespace, service.Name)
 	if err != nil {
-		return fmt.Errorf("%w for service '%s'", err, service.Name)
+		return "", fmt.Errorf("%w for service '%s'", err, service.Name)
 	}
 
 	// Find open port
 	podPort, err := findPodPortFromServicePort(canaryPod, service, servicePortName)
 	if err != nil {
-		return fmt.Errorf("failed to find port '%s' in service '%s': %w", servicePortName, service.Name, err)
+		return "", fmt.Errorf("failed to find port '%s' in service '%s': %w", servicePortName, service.Name, err)
 	}
 
 	log.Trace().Str("pod_name", canaryPod.Name).Msg("Found running pod backing the service")
@@ -514,49 +632,13 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 		Msg("Proxying request to pod")
 
 	// Manually construct the path to avoid incorrect URL escaping of the colon by the default client-go URL builder.
-	proxyPath := fmt.Sprintf(
+	return fmt.Sprintf(
 		"/api/v1/namespaces/%s/pods/%s:%d/proxy%s",
 		namespace,
 		canaryPod.Name,
 		podPort,
 		canaryPath,
-	)
-
-	// Use AbsPath to set the full path for the request, bypassing the builder.
-	req := clientset.CoreV1().RESTClient().Verb(method).AbsPath(proxyPath)
-	req.Body(writePayload(payload))
-	req.SetHeader("Content-Type", "application/json")
-
-	// Execute the request and get the raw result.
-	result := req.Do(ctx)
-	if err := result.Error(); err != nil {
-		return fmt.Errorf("request to pod proxy failed: %w", err)
-	}
-
-	// Get the raw response body.
-	rawBody, err := result.Raw()
-	if err != nil {
-		return fmt.Errorf("failed to get raw response from proxy: %w", err)
-	}
-
-	// Print the Response
-	if statusMap, err := readPayload(rawBody, map[string][]handler.CanaryGateStatus{}); err != nil {
-		return fmt.Errorf("failed to read response payload: %w", err)
-	} else {
-		for _, v := range *statusMap {
-			pad := "%-25s"
-			if len(v) == 1 {
-				pad = "%s"
-			}
-			for _, s := range v {
-				log.Info().
-					Str("gate", fmt.Sprintf(pad, string(s.Type))).
-					Str("status", string(s.Status)).
-					Msgf("Canary Gate Status for [%s]", s.Name)
-			}
-		}
-	}
-	return nil
+	), nil
 }
 
 // loadKubernetesConfig loads the Kubernetes configuration for the specified cluster alias.

@@ -12,7 +12,7 @@ Canary Gate is a tool created for integration with [Flagger](https://docs.flagge
 
 Flagger will provide the [webhook](https://docs.flagger.app/usage/webhooks) for each canary phase. The tool will communicate with Flagger and return either the advance or halt command to Flagger.
 
-```
+```text
       .─.        ┌───────────────┐                                 ┌──────────┐
      (   )──────▶│confirm-rollout│───────open─────────────────────▶│ rollout  │◀───────┐
       `─'        └───────────────┘                 ┌──close────────└──────────┘        │
@@ -60,36 +60,30 @@ Flagger will provide the [webhook](https://docs.flagger.app/usage/webhooks) for 
 Each gate controls the flow of the Flagger Canary process.
 
 1. When a new version is detected, it will check the <confirm-rollout> gate.
-
-   * If the gate is open, it will proceed to the next stage.
-   * If the gate is closed, it will halt the process and wait until the gate is opened.
+   - If the gate is open, it will proceed to the next stage.
+   - If the gate is closed, it will halt the process and wait until the gate is opened.
 
 2. Next, it will check the <pre-rollout> gate. This stage is not depicted in the diagram.
-
-   * If the gate is open, it will proceed to the next stage.
-   * If the gate is closed, it will halt the process and wait until the gate is opened.
+   - If the gate is open, it will proceed to the next stage.
+   - If the gate is closed, it will halt the process and wait until the gate is opened.
 
 3. Flagger will begin increasing traffic based on the configuration in CanaryGate. Before each traffic increase, it will check the <rollout> and <confirm-traffic-increase> gates.
-
-   * If <rollout> is open, it will proceed to the next stage.
-   * If <rollout> is closed, it will halt the process and continue monitoring metrics. If metrics indicate failure, it will initiate a rollback.
-   * If <confirm-traffic-increase> is open, it will continue to increase traffic and proceed to the next stage.
-   * If <confirm-traffic-increase> is closed, it will halt the process.
+   - If <rollout> is open, it will proceed to the next stage.
+   - If <rollout> is closed, it will halt the process and continue monitoring metrics. If metrics indicate failure, it will initiate a rollback.
+   - If <confirm-traffic-increase> is open, it will continue to increase traffic and proceed to the next stage.
+   - If <confirm-traffic-increase> is closed, it will halt the process.
 
 4. After increasing traffic until it reaches the maximum weight, it will check the <confirm-promotion> gate.
-
-   * If the gate is open, it will proceed to promote to the new version.
-   * If the gate is closed, it will halt the process and continue monitoring metrics. If metrics indicate failure, it will initiate a rollback.
+   - If the gate is open, it will proceed to promote to the new version.
+   - If the gate is closed, it will halt the process and continue monitoring metrics. If metrics indicate failure, it will initiate a rollback.
 
 5. Flagger will copy the canary deployment specification template over to the primary. After promotion is finalized, the <post-rollout> gate is checked. This stage is not depicted in the diagram.
-
-   * If the gate is open, the process is completed.
-   * If the gate is closed, the process is pending finalization.
+   - If the gate is open, the process is completed.
+   - If the gate is closed, the process is pending finalization.
 
 6. The <rollback> gate is continuously monitored throughout the process.
-
-   * If the gate is open, the rollback process is initiated.
-   * If the gate is closed, the rollout process continues.
+   - If the gate is open, the rollback process is initiated.
+   - If the gate is closed, the rollout process continues.
 
 # Installation
 
@@ -98,14 +92,16 @@ Each gate controls the flow of the Flagger Canary process.
 First, you will need to install Flagger on your Kubernetes cluster.
 
 Install Flagger CRD
-```
+
+```bash
 kubectl apply -f https://raw.githubusercontent.com/fluxcd/flagger/main/artifacts/flagger/crd.yaml
 ```
 
 Flagger requires the installation of Istio or another service mesh to manage traffic effectively. It is recommended to set up Istio before continuing with the installation of Flagger in the next step. The metric server can be omitted at this stage. Please check the Flagger [metricc](https://docs.flagger.app/usage/metrics) documentation for a list of supported providers.
 
 Deploy Flagger
-```
+
+```bash
 helm repo add flagger https://flagger.app
 helm upgrade -i flagger flagger/flagger \
 --namespace=istio-system \
@@ -113,16 +109,17 @@ helm upgrade -i flagger flagger/flagger \
 --set meshProvider=istio
 ```
 
-See full installation detail from https://docs.flagger.app/install/flagger-install-on-kubernetes
+See full installation detail from [https://docs.flagger.app/install/flagger-install-on-kubernetes](https://docs.flagger.app/install/flagger-install-on-kubernetes)
 
 ## Install Canary Gate
 
-1) Install Canary Gate CRD
-```
+1. Install Canary Gate CRD
+
+```bash
 kubectl apply -f https://raw.githubusercontent.com/KongZ/canary-gate/main/docs/canarygate-crd.yaml
 ```
 
-2) Run helm chart install
+2. Run helm chart install
 
 ```bash
 helm repo add piggysec https://piggysec.com
@@ -161,24 +158,24 @@ spec:
 Canary Gate contains `target` and `flagger`
 
 ```yaml
-  target:
-    namespace: demo-ns
-    name: demo
+target:
+  namespace: demo-ns
+  name: demo
 ```
 
-The target specifies the location of the `Canary` object. The CanaryGate will replicate all content under `flagger` to the Canary object upon execution. You can find the description and configuration instructions for Canary https://docs.flagger.app/usage/how-it-works.
+The target specifies the location of the `Canary` object. The CanaryGate will replicate all content under `flagger` to the Canary object upon execution. You can find the description and configuration instructions for Canary [https://docs.flagger.app/usage/how-it-works](https://docs.flagger.app/usage/how-it-works).
 
-# CLI
+# Command-Line (CLI)
 
-Use can the CLI tool to open/close gates.
+Use can the command-line tool to open/close gates.
 
-## Installation
+## CLI Installation
 
-TODO brew
-TODO binary download
-TODO code compile
+<!-- TODO brew -->
+<!-- TODO binary download -->
+<!-- TODO code compile -->
 
-# Sample Canary 
+# Sample Canary
 
 You can find more sample from Flagger documents. There are few examples can be found in this repository.
 

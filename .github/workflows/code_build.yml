@@ -1,4 +1,4 @@
-name: Build and Test wihtout Docker
+name: Build and Test
 
 on:
   pull_request:
@@ -38,8 +38,10 @@ jobs:
 
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
+        env:
+          GOROOT: ''
         with:
-          args: '-no-fail ./...'
+          args: ' -no-fail ./...'
 
       - name: Build
         run: go build -v ./...
