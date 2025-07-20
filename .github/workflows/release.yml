@@ -7,6 +7,7 @@ on:
 
 env:
   REGISTRY_IMAGE: ghcr.io/kongz/canary-gate
+  REGISTRY_CHART: ghcr.io/kongz/canary-gate-chart
 
 jobs:
   release-image:
@@ -100,5 +101,15 @@ jobs:
         uses: helm/chart-releaser-action@v1.7.0
         with:
           charts_dir: charts
+          skip_upload: true
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Push Charts to GHCR
+        run: |
+          for pkg in .cr-release-packages/*; do
+            if [ -z "${pkg:-}" ]; then
+              break
+            fi
+            helm push "${pkg}" oci://${{ env.REGISTRY_CHART }}
+          done
