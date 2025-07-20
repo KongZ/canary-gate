@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY_IMAGE: ghcr.io/kongz/canary-gate
-  REGISTRY_CHART: ghcr.io/kongz/charts
+  REGISTRY_CHART: ghcr.io/kongz/helm-charts
 
 jobs:
   release-image:
