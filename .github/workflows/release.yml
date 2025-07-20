@@ -177,10 +177,10 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             # For Windows, create a .zip file
             cd release-builds
-            zip ${{ matrix.archive_name }} release-builds/${{ matrix.binary_name }}
+            zip ../${{ matrix.archive_name }} ${{ matrix.binary_name }}
           else
             # For Linux and macOS, create a .tar.gz file
-            tar -czvf ${{ matrix.archive_name }} -C release-builds/${{ matrix.binary_name }}
+            tar -czvf ${{ matrix.archive_name }} -C release-builds ${{ matrix.binary_name }}
           fi
 
       - name: Upload compressed artifact

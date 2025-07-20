@@ -113,17 +113,17 @@ See full installation detail from [https://docs.flagger.app/install/flagger-inst
 
 ## Install Canary Gate
 
-1. Install Canary Gate CRD
+1. Run helm chart install
+
+```bash
+helm -n canary-gate install canary-gate oci://ghcr.io/kongz/helm-charts/canary-gate --version 0.1.1
+```
+
+If you encounter problems with the installed Custom Resource Definition (CRD) file, you may need to install the CRD prior to continuing with the Helm installation.
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/KongZ/canary-gate/main/docs/canarygate-crd.yaml
-```
-
-2. Run helm chart install
-
-```bash
-helm repo add piggysec https://piggysec.com
-helm -n canary-gate install canary-gate piggysec/canary-gate
+helm -n canary-gate install canary-gate oci://ghcr.io/kongz/helm-charts/canary-gate --set crd.create=false
 ```
 
 ## Configure Canary Gate
