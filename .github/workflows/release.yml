@@ -129,3 +129,77 @@ jobs:
           done
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+  release-cli:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      # The matrix defines the different platforms to build for
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            binary_name: linux/amd64/canary-gate
+            archive_name: canary-gate-linux-amd64.tar.gz
+          - goos: windows
+            goarch: amd64
+            binary_name: windows/amd64/canary-gate.exe
+            archive_name: canary-gate-windows-amd64.zip
+          - goos: darwin
+            goarch: amd64
+            binary_name: darwin/amd64/canary-gate
+            archive_name: canary-gate-darwin-amd64.tar.gz
+          - goos: darwin
+            goarch: arm64
+            binary_name: darwin/arm64/canary-gate
+            archive_name: canary-gate-darwin-arm64.tar.gz
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.24.x
+
+      - name: Build Go binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p release-builds
+          go build -v -o release-builds/${{ matrix.binary_name }} ./cli/main.go
+
+      - name: Compress binary
+        run: |
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            # For Windows, create a .zip file
+            cd release-builds
+            zip ${{ matrix.archive_name }} release-builds/${{ matrix.binary_name }}
+          else
+            # For Linux and macOS, create a .tar.gz file
+            tar -czvf ${{ matrix.archive_name }} -C release-builds/${{ matrix.binary_name }}
+          fi
+
+      - name: Upload compressed artifact
+        # Upload the compressed archive, not the raw binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive_name }}
+          path: ${{ matrix.archive_name }}
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets/
+
+      - name: Upload assets to release 🚀
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: release-assets/**/*
+          tag: ${{ github.ref }}
+          overwrite: true
+          file_glob: true

@@ -57,7 +57,7 @@ build-cli: ## Build all cli binaries
 	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/linux/amd64/canary-gate cli/main.go
 	@echo "\033[0;31m\n🚜 Building canary-gate-cli (windows/386)..."
 	@mkdir -p bin/win/386
-	@GOOS=windows GOARCH=386 CGO_ENABLED=0 go build -o bin/win/386canary-gate.exe cli/main.go
+	@GOOS=windows GOARCH=386 CGO_ENABLED=0 go build -o bin/win/386/canary-gate.exe cli/main.go
 	@echo "\033[0;31m\n🚜 Building canary-gate-cli (darwin/amd64)..."
 	@mkdir -p bin/darwin/amd64
 	@GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o bin/darwin/amd64/canary-gate cli/main.go
