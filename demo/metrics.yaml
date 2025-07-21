@@ -10,7 +10,7 @@ spec:
       name: datadog
     type: datadog
   query: |
-    100 * (sum:trace.envoy.proxy.errors{env:staging,service:core}.as_rate() / sum:trace.envoy.proxy.hits{env:staging,service:core}.as_rate())
+    100 * (sum:trace.envoy.proxy.errors{service:demo}.as_rate() / sum:trace.envoy.proxy.hits{service:demo}.as_rate())
 ---
 apiVersion: flagger.app/v1beta1
 kind: MetricTemplate

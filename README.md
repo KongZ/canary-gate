@@ -97,7 +97,7 @@ Install Flagger CRD
 kubectl apply -f https://raw.githubusercontent.com/fluxcd/flagger/main/artifacts/flagger/crd.yaml
 ```
 
-Flagger requires the installation of Istio or another service mesh to manage traffic effectively. It is recommended to set up Istio before continuing with the installation of Flagger in the next step. The metric server can be omitted at this stage. Please check the Flagger [metricc](https://docs.flagger.app/usage/metrics) documentation for a list of supported providers.
+Flagger requires the installation of Istio or another service mesh to manage traffic effectively. It is recommended to set up Istio before continuing with the installation of Flagger in the next step. The metric server can be omitted at this stage. Please check the Flagger [metrics](https://docs.flagger.app/usage/metrics) documentation for a list of supported providers.
 
 Deploy Flagger
 
@@ -116,14 +116,19 @@ See full installation detail from [https://docs.flagger.app/install/flagger-inst
 1. Run helm chart install
 
 ```bash
-helm -n canary-gate install canary-gate oci://ghcr.io/kongz/helm-charts/canary-gate --version 0.1.1
+helm -n canary-gate install \
+  canary-gate oci://ghcr.io/kongz/helm-charts/canary-gate \
+  --version 0.1.1
 ```
 
 If you encounter problems with the installed Custom Resource Definition (CRD) file, you may need to install the CRD prior to continuing with the Helm installation.
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/KongZ/canary-gate/main/docs/canarygate-crd.yaml
-helm -n canary-gate install canary-gate oci://ghcr.io/kongz/helm-charts/canary-gate --set crd.create=false
+
+helm -n canary-gate install \
+  canary-gate oci://ghcr.io/kongz/helm-charts/canary-gate \
+  --set crd.create=false
 ```
 
 ## Configure Canary Gate
@@ -173,7 +178,27 @@ Use can the command-line tool to open/close gates.
 
 <!-- TODO brew -->
 <!-- TODO binary download -->
-<!-- TODO code compile -->
+### Downloading CLI Binary Files
+
+You can download the binary files from [releases](https://github.com/KongZ/canary-gate/releases).
+
+Please select the appropriate version and operating system for your download.
+
+### Build CLI from code
+
+To clone the project to your local machine, use the following command:
+
+```bash
+git clone https://github.com/KongZ/canary-gate.git
+```
+
+After cloning, execute the following command to build the CLI:
+
+```bash
+make build-cli
+```
+
+The makefile will compile the CLI binary for all platforms and place it in the bin folder.
 
 # Sample Canary
 

@@ -68,20 +68,20 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
           build-args: |
-            VERSION=${{ steps.version.outputs.value }}
+            VERSION=${{ github.ref_name }}
             COMMIT_HASH=${{ github.sha }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
           load: true
-          platforms: ${{ matrix.platform }}
           push: true
-          tags: |
-            ${{ env.REGISTRY_IMAGE }}:${{ github.sha }}
-            ${{ env.REGISTRY_IMAGE }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  chart-release:
+  release-chart:
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -130,10 +130,8 @@ jobs:
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
-  release-cli:
+  build-cli:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     strategy:
       # The matrix defines the different platforms to build for
       matrix:
@@ -141,19 +139,19 @@ jobs:
           - goos: linux
             goarch: amd64
             binary_name: linux/amd64/canary-gate
-            archive_name: canary-gate-linux-amd64.tar.gz
+            archive_name: canary-gate-${{ github.ref_name }}-linux-amd64.tar.gz
           - goos: windows
             goarch: amd64
             binary_name: windows/amd64/canary-gate.exe
-            archive_name: canary-gate-windows-amd64.zip
+            archive_name: canary-gate-${{ github.ref_name }}-windows-amd64.zip
           - goos: darwin
             goarch: amd64
             binary_name: darwin/amd64/canary-gate
-            archive_name: canary-gate-darwin-amd64.tar.gz
+            archive_name: canary-gate-${{ github.ref_name }}-darwin-amd64.tar.gz
           - goos: darwin
             goarch: arm64
             binary_name: darwin/arm64/canary-gate
-            archive_name: canary-gate-darwin-arm64.tar.gz
+            archive_name: canary-gate-${{ github.ref_name }}-darwin-arm64.tar.gz
 
     steps:
       - name: Checkout code
@@ -190,7 +188,13 @@ jobs:
           name: ${{ matrix.archive_name }}
           path: ${{ matrix.archive_name }}
 
-      - name: Download all build artifacts
+  release-cli:
+    runs-on: ubuntu-latest
+    needs: build-cli
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build cli artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-assets/
