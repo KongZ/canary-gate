@@ -16,6 +16,8 @@ limitations under the License.
 package store
 
 import (
+	"context"
+
 	"github.com/KongZ/canary-gate/service"
 )
 
@@ -37,10 +39,18 @@ type StoreKey struct {
 
 // Store is an interface that defines methods for managing gate states.
 type Store interface {
+	// GateOpen opens the gate for a given key.
 	GateOpen(key StoreKey)
+	// GateClose closes the gate for a given key.
 	GateClose(key StoreKey)
+	// IsGateOpen checks if the gate is open for a given key.
 	IsGateOpen(key StoreKey) bool
+	// Shutdown is called to clean up resources used by the store.
 	Shutdown() error
+	// UpdateEvent updates the event message for a given key.
+	UpdateEvent(ctx context.Context, key StoreKey, status string, message string)
+	// Returns the last event message for a given key.
+	GetLastEvent(ctx context.Context, key StoreKey) string
 }
 
 // defaultValue returns the default gate status based on the hook type.

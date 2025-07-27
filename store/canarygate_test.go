@@ -16,6 +16,7 @@ limitations under the License.
 package store
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -58,5 +59,33 @@ func TestCanaryGate(t *testing.T) {
 		time.Sleep(10 * time.Millisecond) // wait for gate to open
 		result = store.IsGateOpen(sk)
 		require.Equalf(t, v.expectedAfterOpen, result, "[%s] is [opened] gate expected %v found %v", serviceType, v.expectedAfterOpen, result)
+
+		// shutdown store
+		err = store.Shutdown()
+		require.NoError(t, err, "Shutdown should not return an error")
 	}
+}
+
+func TestCanaryGateEvent(t *testing.T) {
+	sk := StoreKey{
+		Namespace: "canary-ns",
+		Name:      "test-canary",
+	}
+	// Create a fake clientset
+	scheme := runtime.NewScheme()
+	f := fake.NewSimpleDynamicClient(scheme)
+
+	// Tests
+	store, err := NewCanaryGateStore(f)
+	require.NoError(t, err, "createCanaryGate should not return an error")
+	if err != nil {
+		t.Error(err)
+	}
+	// Check initial event state
+	result := store.GetLastEvent(context.TODO(), sk)
+	require.EqualValuesf(t, "", result, "Event should be empty, found %s", result)
+	eventMessage := "Test event message"
+	store.UpdateEvent(context.TODO(), sk, "status", eventMessage)
+	result = store.GetLastEvent(context.TODO(), sk)
+	require.EqualValuesf(t, eventMessage, result, "Event message should be '%s', found '%s'", eventMessage, result)
 }

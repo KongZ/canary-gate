@@ -97,16 +97,18 @@ Install Flagger CRD
 kubectl apply -f https://raw.githubusercontent.com/fluxcd/flagger/main/artifacts/flagger/crd.yaml
 ```
 
-Flagger requires the installation of Istio or another service mesh to manage traffic effectively. It is recommended to set up Istio before continuing with the installation of Flagger in the next step. The metric server can be omitted at this stage. Please check the Flagger [metrics](https://docs.flagger.app/usage/metrics) documentation for a list of supported providers.
+Flagger requires the installation of Istio or another service mesh to manage traffic effectively. It is recommended to [set up Istio](https://istio.io/latest/docs/setup/install/helm/) before continuing with the installation of Flagger in the next step. The metric server can be omitted at this stage. Please check the Flagger [metrics](https://docs.flagger.app/usage/metrics) documentation for a list of supported providers.
 
 Deploy Flagger
 
 ```bash
 helm repo add flagger https://flagger.app
+
 helm upgrade -i flagger flagger/flagger \
---namespace=istio-system \
+--namespace=flagger \
 --set crd.create=false \
---set meshProvider=istio
+--set meshProvider=istio \
+--create-namespace
 ```
 
 See full installation detail from [https://docs.flagger.app/install/flagger-install-on-kubernetes](https://docs.flagger.app/install/flagger-install-on-kubernetes)
@@ -118,7 +120,7 @@ See full installation detail from [https://docs.flagger.app/install/flagger-inst
 ```bash
 helm -n canary-gate install \
   canary-gate oci://ghcr.io/kongz/helm-charts/canary-gate \
-  --version 0.1.1
+  --version 0.1.2
 ```
 
 If you encounter problems with the installed Custom Resource Definition (CRD) file, you may need to install the CRD prior to continuing with the Helm installation.
@@ -128,7 +130,9 @@ kubectl apply -f https://raw.githubusercontent.com/KongZ/canary-gate/main/docs/c
 
 helm -n canary-gate install \
   canary-gate oci://ghcr.io/kongz/helm-charts/canary-gate \
-  --set crd.create=false
+  --set crd.create=false \
+  --namespace=canary-gate \
+  --create-namespace
 ```
 
 ## Configure Canary Gate

@@ -21,6 +21,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/KongZ/canary-gate/service"
 	"github.com/rs/zerolog/log"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -103,28 +104,23 @@ func (s *ConfigMapStore) createConfigMap(key StoreKey) *corev1.ConfigMap {
 }
 
 func (s *ConfigMapStore) updateGate(key StoreKey, val bool) {
-	confName := s.getConfigMapName(key)
-	ns := s.getConfigMapNamespace(key)
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		// defer cancel()
-		conf, err := s.k8sClient.CoreV1().ConfigMaps(ns).Get(context.TODO(), confName, metav1.GetOptions{})
+		ctx := context.Background()
+		conf, err := s.CreateConfigMapAndGet(ctx, key)
 		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				log.Warn().Msgf("Unable to load configmap [%s/%s].", ns, confName)
-				conf = s.createConfigMap(key)
-			} else if statusError, isStatus := err.(*k8serrors.StatusError); isStatus {
-				log.Error().Msgf("Error to load configmap [%s/%s] %v.", ns, confName, statusError.ErrStatus.Message)
-				return err
-			}
+			return err
 		}
 		conf.Data[string(key.Type)] = GateStatus(val)
-		_, err = s.k8sClient.CoreV1().ConfigMaps(ns).Update(context.TODO(), conf, metav1.UpdateOptions{})
-		log.Trace().Msgf("Saving to configmap [%s/%s]. Gate [%s] is set to [%s]", ns, conf.Name, key, conf.Data[string(key.Type)])
+		log.Trace().Msgf("Saving to configmap [%s/%s]. Gate [%s] is set to [%s]", conf.Namespace, conf.Name, key, conf.Data[string(key.Type)])
+		_, err = s.k8sClient.CoreV1().ConfigMaps(conf.Namespace).Update(ctx, conf, metav1.UpdateOptions{})
+		log.Trace().Msgf("Recording event [%s/%s]. Gate [%s] is set to [%s]", conf.Namespace, conf.Name, key, GateStatus(val))
+		s.UpdateEvent(ctx, key, "Updated", fmt.Sprintf("Gate [%s] is set to [%s]", key.String(), GateStatus(val)))
 		return err
 	})
 	if retryErr != nil {
+		confName := s.getConfigMapName(key)
+		ns := s.getConfigMapNamespace(key)
 		log.Error().Msgf("Unable to update configmap [%s/%s] %v.", ns, confName, retryErr)
-		// cancel()
 	}
 }
 
@@ -137,20 +133,12 @@ func (s *ConfigMapStore) GateClose(key StoreKey) {
 }
 
 func (s *ConfigMapStore) IsGateOpen(key StoreKey) bool {
-	confName := s.getConfigMapName(key)
-	ns := s.getConfigMapNamespace(key)
-	conf, err := s.k8sClient.CoreV1().ConfigMaps(ns).Get(context.TODO(), confName, metav1.GetOptions{})
+	conf, err := s.CreateConfigMapAndGet(context.Background(), key)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			log.Warn().Msgf("Unable to load configmap [%s/%s]. Gate [%s] is set to [%s]", ns, confName, key, defaultText(key))
-			conf = s.createConfigMap(key)
-		} else if statusError, isStatus := err.(*k8serrors.StatusError); isStatus {
-			log.Error().Msgf("Error to load configmap [%s/%s] %v. Gate [%s] is set to [%s]", ns, confName, statusError.ErrStatus.Message, key.String(), defaultText(key))
-			return defaultValue(key)
-		}
+		return defaultValue(key)
 	}
 	val, ok := conf.Data[string(key.Type)]
-	log.Trace().Msgf("Loading from configmap [%s/%s]. Gate [%s] is set to [%s]", ns, conf.Name, key, val)
+	log.Trace().Msgf("Loading from configmap [%s/%s]. Gate [%s] is set to [%s]", conf.Namespace, conf.Name, key, val)
 	if ok {
 		return val == GATE_OPEN
 	}
@@ -159,4 +147,53 @@ func (s *ConfigMapStore) IsGateOpen(key StoreKey) bool {
 
 func (s *ConfigMapStore) Shutdown() error {
 	return nil
+}
+
+func (s *ConfigMapStore) GetConfigMap(ctx context.Context, key StoreKey) (*corev1.ConfigMap, error) {
+	confName := s.getConfigMapName(key)
+	ns := s.getConfigMapNamespace(key)
+	return s.k8sClient.CoreV1().ConfigMaps(ns).Get(ctx, confName, metav1.GetOptions{})
+}
+
+func (s *ConfigMapStore) CreateConfigMapAndGet(ctx context.Context, key StoreKey) (*corev1.ConfigMap, error) {
+	confName := s.getConfigMapName(key)
+	ns := s.getConfigMapNamespace(key)
+	conf, err := s.GetConfigMap(ctx, key)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			log.Warn().Msgf("Unable to load configmap [%s/%s].", ns, confName)
+			_ = s.createConfigMap(key)
+			return s.GetConfigMap(ctx, key) // Reload to ensure we have the latest version
+		} else if statusError, isStatus := err.(*k8serrors.StatusError); isStatus {
+			log.Error().Msgf("Error to load configmap [%s/%s] %v.", ns, confName, statusError.ErrStatus.Message)
+			return nil, err
+		}
+	}
+	return conf, err
+}
+
+func (s *ConfigMapStore) UpdateEvent(ctx context.Context, key StoreKey, status string, message string) {
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		conf, err := s.CreateConfigMapAndGet(ctx, key)
+		if err != nil {
+			return err
+		}
+		conf.Data[string(service.HookEvent)] = message
+		log.Trace().Msgf("Saving to configmap [%s/%s]. Status=%s", conf.Namespace, conf.Name, message)
+		_, err = s.k8sClient.CoreV1().ConfigMaps(conf.Namespace).Update(ctx, conf, metav1.UpdateOptions{})
+		return err
+	})
+	if retryErr != nil {
+		confName := s.getConfigMapName(key)
+		ns := s.getConfigMapNamespace(key)
+		log.Error().Msgf("Unable to update configmap [%s/%s] %v.", ns, confName, retryErr)
+	}
+}
+
+func (s *ConfigMapStore) GetLastEvent(ctx context.Context, key StoreKey) string {
+	conf, err := s.GetConfigMap(ctx, key)
+	if err != nil {
+		return ""
+	}
+	return conf.Data[string(service.HookEvent)]
 }

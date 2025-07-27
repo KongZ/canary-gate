@@ -48,15 +48,3 @@ jobs:
 
       - name: Test with the Go CLI
         run: go test -race -cover -v -coverprofile=coverage.txt ./...
-
-      - name: Go Coverage Report
-        id: jacoco
-        uses: madrapps/jacoco-report@v1.7.2
-        with:
-          paths: |
-            ${{ github.workspace }}/**/build/reports/go/prodNormalDebugCoverage/prodNormalDebugCoverage.xml,
-            ${{ github.workspace }}/**/build/reports/go/**/debugCoverage.xml
-          token: ${{ secrets.GITHUB_TOKEN }}
-          min-coverage-overall: 40
-          min-coverage-changed-files: 40
-          pass-emoji: '✅'

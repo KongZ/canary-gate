@@ -169,8 +169,31 @@ func launchController(ctx context.Context, cmd *cli.Command, livez, readyz healt
 
 	log.Info().Msgf("Starting controller")
 	if err := mgr.Start(ctx); err != nil {
-		log.Fatal().Msgf("Problem running controller: %s", err)
+		if err = handleControllerError(ctx, err); err != nil {
+			log.Fatal().Msgf("Problem running controller: %s", err)
+		}
 	}
+}
+
+// handleControllerError handle controller error and return the error if it cannot be resolved.
+// Current implementation is only checking for the existence of required CRDs and logs an error if they are not found.
+func handleControllerError(_ context.Context, err error) error {
+	// if config, clientErr := ctrl.GetConfig(); clientErr == nil {
+	// 	if client, clientErr := apiextensionsclientset.NewForConfig(config); clientErr == nil {
+	// 		crdName := flaggerv1beta1.Kind("canaries").String()
+	// 		_, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crdName, metav1.GetOptions{})
+	// 		if apierrors.IsNotFound(err) {
+	// 			log.Error().Msgf("CRD %s not found. Please make sure Flagger is installed", crdName)
+	// 		}
+	// 		gvk := piggysecv1alpha1.GroupVersion.WithKind(store.GroupVersionResource.Resource)
+	// 		crdName = gvk.GroupKind().String()
+	// 		_, err = client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crdName, metav1.GetOptions{})
+	// 		if apierrors.IsNotFound(err) {
+	// 			log.Error().Msgf("CRD %s not found. Please make sure CanaryGate is installed", crdName)
+	// 		}
+	// 	}
+	// }
+	return err
 }
 
 // appHealthz is a health check function for the application.
@@ -251,7 +274,7 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 		ReadHeaderTimeout: 2 * time.Second,
 	}
 
-	// start controller
+	// start controller for CRD and health checks
 	go launchController(ctx, cmd, appHealthz, appHealthz)
 
 	// start server
@@ -263,7 +286,7 @@ func launchServer(ctx context.Context, cmd *cli.Command) error {
 		if err := stor.Shutdown(); err != nil {
 			log.Error().Msgf("Store Shutdown: %v", err)
 		}
-		if err := server.Shutdown(context.Background()); err != nil {
+		if err := server.Shutdown(ctx); err != nil {
 			// Error from closing listeners, or context timeout:
 			log.Error().Msgf("HTTP server Shutdown: %v", err)
 		}

@@ -55,7 +55,7 @@ type CanaryGateStore struct {
 	recorder  record.EventRecorderLogger
 }
 
-var gvr = schema.GroupVersionResource{
+var GroupVersionResource = schema.GroupVersionResource{
 	Group:    piggysecv1alpha1.GroupVersion.Group,
 	Version:  piggysecv1alpha1.GroupVersion.Version,
 	Resource: "canarygates",
@@ -138,7 +138,7 @@ func (s *CanaryGateStore) CreateCanaryGate(ctx context.Context, key StoreKey) *p
 	gateNs := s.getCanaryGateNamespace(key)
 	canaryGate := &piggysecv1alpha1.CanaryGate{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: fmt.Sprintf("%s/%s", gvr.Group, gvr.Version),
+			APIVersion: fmt.Sprintf("%s/%s", GroupVersionResource.Group, GroupVersionResource.Version),
 			Kind:       "CanaryGate",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -154,7 +154,7 @@ func (s *CanaryGateStore) CreateCanaryGate(ctx context.Context, key StoreKey) *p
 	}
 
 	// Create the resource using the dynamic client
-	_, err = s.k8sClient.Resource(gvr).Namespace(gateNs).Create(ctx, &unstructured.Unstructured{Object: unstructuredObj}, metav1.CreateOptions{})
+	_, err = s.k8sClient.Resource(GroupVersionResource).Namespace(gateNs).Create(ctx, &unstructured.Unstructured{Object: unstructuredObj}, metav1.CreateOptions{})
 	if err != nil {
 		log.Error().Msgf("Error while creating canarygate [%s/%s] %v. Gate [%s] is set to [%s]", gateNs, key.Name, err, key.String(), defaultText(key))
 	}
@@ -163,7 +163,7 @@ func (s *CanaryGateStore) CreateCanaryGate(ctx context.Context, key StoreKey) *p
 
 func (s *CanaryGateStore) GetCanaryGate(ctx context.Context, key StoreKey) (*piggysecv1alpha1.CanaryGate, error) {
 	gateNs := s.getCanaryGateNamespace(key)
-	unstructuredObj, err := s.k8sClient.Resource(gvr).Namespace(gateNs).Get(ctx, key.Name, metav1.GetOptions{})
+	unstructuredObj, err := s.k8sClient.Resource(GroupVersionResource).Namespace(gateNs).Get(ctx, key.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -177,26 +177,29 @@ func (s *CanaryGateStore) GetCanaryGate(ctx context.Context, key StoreKey) (*pig
 	return &gate, nil
 }
 
-func (s *CanaryGateStore) CreateCanaryGateAndGet(ctx context.Context, key StoreKey) *piggysecv1alpha1.CanaryGate {
-	_ = s.CreateCanaryGate(ctx, key)
-	conf, _ := s.GetCanaryGate(ctx, key)
-	return conf
+func (s *CanaryGateStore) CreateCanaryGateAndGet(ctx context.Context, key StoreKey) (*piggysecv1alpha1.CanaryGate, error) {
+	gateNs := s.getCanaryGateNamespace(key)
+	conf, err := s.GetCanaryGate(ctx, key)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			log.Warn().Msgf("Unable to load configmap [%s/%s].", gateNs, key.Name)
+			_ = s.CreateCanaryGate(ctx, key)
+			return s.GetCanaryGate(ctx, key) // Reload to ensure we have the latest version
+		} else if statusError, isStatus := err.(*k8serrors.StatusError); isStatus {
+			log.Error().Msgf("Error to load configmap [%s/%s] %v.", gateNs, key.Name, statusError.ErrStatus.Message)
+			return nil, err
+		}
+	}
+	return conf, nil
 }
 
 func (s *CanaryGateStore) UpdateCanaryGate(ctx context.Context, key StoreKey, val bool) {
 	gateNs := s.getCanaryGateNamespace(key)
 	// Perform the update
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		// First, get the latest version of the object
-		conf, err := s.GetCanaryGate(ctx, key)
+		conf, err := s.CreateCanaryGateAndGet(ctx, key)
 		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				log.Warn().Msgf("Unable to load canarygate [%s/%s].", gateNs, key.Name)
-				conf = s.CreateCanaryGateAndGet(ctx, key)
-			} else if statusError, isStatus := err.(*k8serrors.StatusError); isStatus {
-				log.Error().Msgf("Error to load canarygate [%s/%s] %v.", gateNs, key.Name, statusError.ErrStatus.Message)
-				return err
-			}
+			return err
 		}
 		// update gate fields
 		status := GateStatus(val)
@@ -225,8 +228,10 @@ func (s *CanaryGateStore) UpdateCanaryGate(ctx context.Context, key StoreKey, va
 		if err != nil {
 			return err
 		}
-		_, err = s.k8sClient.Resource(gvr).Namespace(gateNs).Update(ctx, &unstructured.Unstructured{Object: unstructuredObj}, metav1.UpdateOptions{})
 		log.Trace().Msgf("Saving to canarygate [%s/%s]. Gate [%s] is set to [%s]", gateNs, conf.Name, key, status)
+		_, err = s.k8sClient.Resource(GroupVersionResource).Namespace(gateNs).Update(ctx, &unstructured.Unstructured{Object: unstructuredObj}, metav1.UpdateOptions{})
+		log.Trace().Msgf("Recording event [%s/%s]. Gate [%s] is set to [%s]", gateNs, conf.Name, key, status)
+		s.UpdateEvent(ctx, key, "Updated", fmt.Sprintf("Gate [%s] is set to [%s]", key.String(), status))
 		return err
 	})
 	if retryErr != nil {
@@ -234,21 +239,22 @@ func (s *CanaryGateStore) UpdateCanaryGate(ctx context.Context, key StoreKey, va
 	}
 }
 
+func (s *CanaryGateStore) GetLastEvent(ctx context.Context, key StoreKey) string {
+	gate, err := s.GetCanaryGate(ctx, key)
+	if err != nil {
+		return ""
+	}
+	return gate.Status.Message
+}
+
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
-func (s *CanaryGateStore) UpdateCanaryGateStatus(ctx context.Context, key StoreKey, status string, message string) {
+func (s *CanaryGateStore) UpdateEvent(ctx context.Context, key StoreKey, status string, message string) {
 	gateNs := s.getCanaryGateNamespace(key)
 	// Perform the update
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		// First, get the latest version of the object
-		conf, err := s.GetCanaryGate(ctx, key)
+		conf, err := s.CreateCanaryGateAndGet(ctx, key)
 		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				log.Warn().Msgf("Unable to load configmap [%s/%s].", gateNs, key.Name)
-				conf = s.CreateCanaryGateAndGet(ctx, key)
-			} else if statusError, isStatus := err.(*k8serrors.StatusError); isStatus {
-				log.Error().Msgf("Error to load configmap [%s/%s] %v.", gateNs, key.Name, statusError.ErrStatus.Message)
-				return err
-			}
+			return err
 		}
 		conf.Status.Name = key.Name
 		conf.Status.Namespace = key.Namespace
@@ -260,8 +266,7 @@ func (s *CanaryGateStore) UpdateCanaryGateStatus(ctx context.Context, key StoreK
 		if err != nil {
 			return err
 		}
-		// TODO update gate status
-		_, err = s.k8sClient.Resource(gvr).Namespace(gateNs).Update(ctx, &unstructured.Unstructured{Object: unstructuredObj}, metav1.UpdateOptions{})
+		_, err = s.k8sClient.Resource(GroupVersionResource).Namespace(gateNs).Update(ctx, &unstructured.Unstructured{Object: unstructuredObj}, metav1.UpdateOptions{})
 		log.Trace().Msgf("Updating canarygate [%s/%s] status", gateNs, conf.Name)
 		if message != "" {
 			if gate, err := s.GetCanaryGate(ctx, key); err == nil {
@@ -290,15 +295,10 @@ func (s *CanaryGateStore) GateClose(key StoreKey) {
 
 func (s *CanaryGateStore) IsGateOpen(key StoreKey) bool {
 	gateNs := s.getCanaryGateNamespace(key)
-	conf, err := s.GetCanaryGate(context.TODO(), key)
+	conf, err := s.CreateCanaryGateAndGet(context.Background(), key)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			log.Warn().Msgf("Unable to load canarygate [%s/%s]. Gate [%s] is set to [%s]", gateNs, key.Name, key, defaultText(key))
-			// TODO create canarygate
-		} else if statusError, isStatus := err.(*k8serrors.StatusError); isStatus {
-			log.Error().Msgf("Error to load canarygate [%s/%s] %v. Gate [%s] is set to [%s]", gateNs, key.Name, statusError.ErrStatus.Message, key.String(), defaultText(key))
-			return defaultValue(key)
-		}
+		log.Warn().Msgf("Unable to load canarygate [%s/%s]. Gate [%s] is set to [%s]", gateNs, key.Name, key, defaultText(key))
+		return defaultValue(key)
 	}
 	status := ""
 	if conf != nil {

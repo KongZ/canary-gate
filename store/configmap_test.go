@@ -16,11 +16,13 @@ limitations under the License.
 package store
 
 import (
+	"context"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/KongZ/canary-gate/service"
+	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/kubernetes/fake"
 	// k8stesting "k8s.io/client-go/testing"
 )
@@ -106,6 +108,26 @@ func TestConfigMapGate(t *testing.T) {
 		if v.expectedAfterOpen != result {
 			t.Fatalf("[%s] is [opened] gate expected %v found %v", serviceType, v.expectedAfterOpen, result)
 		}
+		// shutdown store
+		err = store.Shutdown()
+		require.NoError(t, err, "Shutdown should not return an error")
 	}
+}
 
+func TestConfigMapEvent(t *testing.T) {
+	sk := StoreKey{
+		Namespace: "canary-ns",
+		Name:      "test-canary",
+	}
+	f := fake.NewSimpleClientset()
+	store, err := NewConfigMapStore(f)
+	if err != nil {
+		t.Error(err)
+	}
+	result := store.GetLastEvent(context.TODO(), sk)
+	require.EqualValuesf(t, "", result, "Event should be empty, found %s", result)
+	eventMessage := "Test event message"
+	store.UpdateEvent(context.TODO(), sk, "status", eventMessage)
+	result = store.GetLastEvent(context.TODO(), sk)
+	require.EqualValuesf(t, eventMessage, result, "Event message should be '%s', found '%s'", eventMessage, result)
 }

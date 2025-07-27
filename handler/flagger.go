@@ -82,6 +82,8 @@ type FlaggerHandler struct {
 	store store.Store
 }
 
+const FLAGGER_METADATA_EVENT_MESSAGE = "eventMessage"
+
 // StoreKey get store key name
 func StoreKey(canary *CanaryWebhookPayload, hook service.HookType) string {
 	return fmt.Sprintf("%s:%s:%s", canary.Namespace, canary.Name, hook)
@@ -195,6 +197,10 @@ func (h *FlaggerHandler) StatusGate() http.Handler {
 				log.Debug().Msgf("%s %s=%s", h.createKey(gate.Namespace, gate.Name), gt, status)
 				h.createResponse(gateResponseMap, gate.Namespace, gate.Name, gt, status)
 			}
+			// Get last event for the gate
+			event := h.store.GetLastEvent(r.Context(), store.StoreKey{Namespace: gate.Namespace, Name: gate.Name})
+			h.createResponse(gateResponseMap, gate.Namespace, gate.Name, service.HookEvent, event)
+			// return the response
 			writePayload(w, &gateResponseMap, http.StatusOK)
 		}
 	})
@@ -248,14 +254,14 @@ func (h *FlaggerHandler) responseWebhook(w http.ResponseWriter, canary *CanaryWe
 func (h *FlaggerHandler) logEvent(hook service.HookType, canary *CanaryWebhookPayload) {
 	var metadataBuilder strings.Builder
 	for k, v := range canary.Metadata {
-		if k != "eventMessage" {
+		if k != FLAGGER_METADATA_EVENT_MESSAGE {
 			if metadataBuilder.Len() > 0 {
 				metadataBuilder.WriteString(", ")
 			}
 			metadataBuilder.WriteString(fmt.Sprintf("%s=%s", k, v))
 		}
 	}
-	message := canary.Metadata["eventMessage"]
+	message := canary.Metadata[FLAGGER_METADATA_EVENT_MESSAGE]
 	// Flagger events do not send phase suceeeded to event. Only post-rollout gets phase succeeded.
 	if strings.Contains(message, "Promotion completed!") {
 		canary.Phase = service.PhaseSucceeded
@@ -264,7 +270,7 @@ func (h *FlaggerHandler) logEvent(hook service.HookType, canary *CanaryWebhookPa
 	if h.store != nil {
 		stor, ok := h.store.(*store.CanaryGateStore)
 		if ok {
-			stor.UpdateCanaryGateStatus(context.Background(), store.StoreKey{Namespace: canary.Namespace, Name: canary.Name}, string(canary.Phase), message)
+			stor.UpdateEvent(context.Background(), store.StoreKey{Namespace: canary.Namespace, Name: canary.Name}, string(canary.Phase), message)
 		}
 	}
 }

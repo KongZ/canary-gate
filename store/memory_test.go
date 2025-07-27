@@ -16,7 +16,10 @@ limitations under the License.
 package store
 
 import (
+	"context"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestMemoryGate(t *testing.T) {
@@ -48,6 +51,25 @@ func TestMemoryGate(t *testing.T) {
 		if v.expectedAfterOpen != result {
 			t.Fatalf("[%s] [close] gate expected %v found %v", serviceType, v.expectedAfterOpen, result)
 		}
+		// shutdown store
+		err = store.Shutdown()
+		require.NoError(t, err, "Shutdown should not return an error")
 	}
+}
 
+func TestMemoryGateEvent(t *testing.T) {
+	sk := StoreKey{
+		Namespace: "canary-ns",
+		Name:      "test-canary",
+	}
+	store, err := NewMemoryStore()
+	if err != nil {
+		t.Error(err)
+	}
+	result := store.GetLastEvent(context.TODO(), sk)
+	require.EqualValuesf(t, "", result, "Event should be empty, found %s", result)
+	eventMessage := "Test event message"
+	store.UpdateEvent(context.TODO(), sk, "status", eventMessage)
+	result = store.GetLastEvent(context.TODO(), sk)
+	require.EqualValuesf(t, eventMessage, result, "Event message should be '%s', found '%s'", eventMessage, result)
 }

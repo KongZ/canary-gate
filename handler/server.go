@@ -7,7 +7,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const version = "0.1.1"
+const version = "0.1.2"
 
 // ServerVersion holds the server version information
 type ServerVersion struct {

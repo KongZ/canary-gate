@@ -21,7 +21,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-const cliVersion = "0.1.1"
+const cliVersion = "0.1.2"
 
 // main is the entry point of the application.
 func main() {
@@ -526,10 +526,16 @@ func run(ctx context.Context, cmd *cli.Command, gate string) error {
 			pad = "%s"
 		}
 		for _, s := range v {
-			log.Info().
-				Str("gate", fmt.Sprintf(pad, string(s.Type))).
-				Str("status", s.Status).
-				Msgf("Canary Gate Status for [%s]", s.Name)
+			if s.Type == service.HookEvent {
+				log.Info().
+					Str("last event", s.Status).
+					Msgf("Canary Gate Status for [%s]", s.Name)
+			} else {
+				log.Info().
+					Str("gate", fmt.Sprintf(pad, string(s.Type))).
+					Str("status", s.Status).
+					Msgf("Canary Gate Status for [%s]", s.Name)
+			}
 		}
 	}
 	return nil

@@ -16,8 +16,11 @@ limitations under the License.
 package store
 
 import (
+	"context"
 	"fmt"
 	"sync"
+
+	"github.com/KongZ/canary-gate/service"
 )
 
 type MemoryStore struct {
@@ -36,10 +39,12 @@ func NewMemoryStore() (Store, error) {
 
 func (s *MemoryStore) GateOpen(key StoreKey) {
 	s.data.Store(s.getKey(key), true)
+	s.UpdateEvent(context.Background(), key, "Updated", fmt.Sprintf("Gate [%s] is set to [%s]", key.String(), GATE_OPEN))
 }
 
 func (s *MemoryStore) GateClose(key StoreKey) {
 	s.data.Store(s.getKey(key), false)
+	s.UpdateEvent(context.Background(), key, "Updated", fmt.Sprintf("Gate [%s] is set to [%s]", key.String(), GATE_CLOSE))
 }
 
 func (s *MemoryStore) IsGateOpen(key StoreKey) bool {
@@ -50,6 +55,10 @@ func (s *MemoryStore) IsGateOpen(key StoreKey) bool {
 	return defaultValue(key)
 }
 
+func (s *MemoryStore) UpdateEvent(ctx context.Context, key StoreKey, status string, message string) {
+	s.data.Store(s.getEventKey(key), message)
+}
+
 func (s *MemoryStore) Shutdown() error {
 	return nil
 }
@@ -57,4 +66,16 @@ func (s *MemoryStore) Shutdown() error {
 // StoreKey get store key name
 func (s *MemoryStore) getKey(key StoreKey) string {
 	return fmt.Sprintf("%s:%s:%s", key.Namespace, key.Name, key.Type)
+}
+
+// StoreKey get store key name
+func (s *MemoryStore) getEventKey(key StoreKey) string {
+	return fmt.Sprintf("%s:%s:%s", key.Namespace, key.Name, string(service.HookEvent))
+}
+
+func (s *MemoryStore) GetLastEvent(ctx context.Context, key StoreKey) string {
+	if v, ok := s.data.Load(s.getEventKey(key)); ok {
+		return v.(string)
+	}
+	return ""
 }
