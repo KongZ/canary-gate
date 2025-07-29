@@ -46,6 +46,7 @@ LABEL VERSION=${VERSION}
 LABEL COMMIT_HASH=${COMMIT_HASH}
 LABEL BUILD_DATE=${BUILD_DATE}
 LABEL org.opencontainers.image.source=https://github.com/KongZ/canary-gate
+LABEL org.opencontainers.image.description="Canary Gate server for integration with Flagger that offers detailed management of Canary deployments"
 
 ENV VERSION=${VERSION}
 ENV LISTEN_ADDRESS=":8080"
