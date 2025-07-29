@@ -33,7 +33,10 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}
+          {{- if .Values.debug.enabled }}
           args:
+            - -vv
+          {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -80,6 +83,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: CANARY_GATE_STORE
               value: {{ .Values.store.type | quote }}
+            - name: CANARY_CLUSTER_SUFFIX
+              value: {{ .Values.clusterSuffix | quote }}
       {{- with .Values.volumes }}
       volumes:
         {{- toYaml . | nindent 8 }}

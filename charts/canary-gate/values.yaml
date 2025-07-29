@@ -10,8 +10,7 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
 
-imagePullSecrets:
-  - name: ghcr
+imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
@@ -113,5 +112,13 @@ tolerations: []
 
 affinity: {}
 
+# The default domain name assigned to the entire Kubernetes cluster
+clusterSuffix: .cluster.local.
+
+# The type of storage to use for the CanaryGate
 store:
   type: "crd"
+
+# Turn on debug mode for the server
+debug:
+  enabled: false

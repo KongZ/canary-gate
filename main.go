@@ -77,10 +77,11 @@ func init() {
 // main is the entry point for the Canary Gate application.
 func main() {
 	cmd := &cli.Command{
-		Name:        "canary-gate",
-		Action:      launchServer,
-		Usage:       "Launches Canary Gate for Flagger",
-		HideVersion: true,
+		Name:                   "canary-gate",
+		Action:                 launchServer,
+		Usage:                  "Launches Canary Gate for Flagger",
+		HideVersion:            true,
+		UseShortOptionHandling: true,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    flagVerbose,
@@ -169,31 +170,8 @@ func launchController(ctx context.Context, cmd *cli.Command, livez, readyz healt
 
 	log.Info().Msgf("Starting controller")
 	if err := mgr.Start(ctx); err != nil {
-		if err = handleControllerError(ctx, err); err != nil {
-			log.Fatal().Msgf("Problem running controller: %s", err)
-		}
+		log.Fatal().Msgf("Problem running controller: %s", err)
 	}
-}
-
-// handleControllerError handle controller error and return the error if it cannot be resolved.
-// Current implementation is only checking for the existence of required CRDs and logs an error if they are not found.
-func handleControllerError(_ context.Context, err error) error {
-	// if config, clientErr := ctrl.GetConfig(); clientErr == nil {
-	// 	if client, clientErr := apiextensionsclientset.NewForConfig(config); clientErr == nil {
-	// 		crdName := flaggerv1beta1.Kind("canaries").String()
-	// 		_, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crdName, metav1.GetOptions{})
-	// 		if apierrors.IsNotFound(err) {
-	// 			log.Error().Msgf("CRD %s not found. Please make sure Flagger is installed", crdName)
-	// 		}
-	// 		gvk := piggysecv1alpha1.GroupVersion.WithKind(store.GroupVersionResource.Resource)
-	// 		crdName = gvk.GroupKind().String()
-	// 		_, err = client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crdName, metav1.GetOptions{})
-	// 		if apierrors.IsNotFound(err) {
-	// 			log.Error().Msgf("CRD %s not found. Please make sure CanaryGate is installed", crdName)
-	// 		}
-	// 	}
-	// }
-	return err
 }
 
 // appHealthz is a health check function for the application.

@@ -150,6 +150,7 @@ func (h *FlaggerHandler) Event() http.Handler {
 			h.logEvent(service.HookEvent, canary)
 			// h.noti.SendMessages()
 		}
+		w.WriteHeader(http.StatusOK)
 	})
 }
 

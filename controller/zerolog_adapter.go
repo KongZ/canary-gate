@@ -17,7 +17,7 @@ func (a *LogrAdapter) Init(info logr.RuntimeInfo) {
 
 // Enabled returns true if the logger is enabled. We'll always enable it.
 func (a *LogrAdapter) Enabled(level int) bool {
-	return level == int(zerolog.DefaultContextLogger.GetLevel())
+	return level == int(zerolog.GlobalLevel())
 }
 
 // Info logs an info message.
