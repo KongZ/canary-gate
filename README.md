@@ -2,7 +2,7 @@
 [![Build](https://github.com/KongZ/canary-gate/actions/workflows/pull_request.yml/badge.svg)](https://github.com/KongZ/canary-gate/actions/workflows/pull_request.yml)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/canary-gate)](https://artifacthub.io/packages/search?repo=canary-gate)
 
-![canary-gate logo](https://raw.githubusercontent.com/KongZ/canary-gate/main/docs/gopher-canary-gate.png "Canary Gate logo")
+<img src="https://raw.githubusercontent.com/KongZ/canary-gate/main/docs/gopher-canary-gate.png" alt="Canary Gate logo" width="200"/>
 
 # Canary Gate
 
