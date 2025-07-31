@@ -21,7 +21,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-const cliVersion = "0.1.2"
+const cliVersion = "0.1.3"
 
 // main is the entry point of the application.
 func main() {
