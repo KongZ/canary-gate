@@ -120,7 +120,7 @@ See full installation detail from [https://docs.flagger.app/install/flagger-inst
 ```bash
 helm -n canary-gate install \
   canary-gate oci://ghcr.io/kongz/helm-charts/canary-gate \
-  --version 0.1.2
+  --version 0.1.3
 ```
 
 If you encounter problems with the installed Custom Resource Definition (CRD) file, you may need to install the CRD prior to continuing with the Helm installation.

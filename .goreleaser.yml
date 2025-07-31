@@ -1,5 +1,6 @@
 # .goreleaser.yml
 
+version: 2
 project_name: canary-gate
 before:
   hooks:
@@ -9,7 +10,7 @@ builds:
     # Statically compiled binary
     env:
       - CGO_ENABLED=0
-    main: ./cli/main
+    main: ./cli/
     goos:
       - linux
       - darwin
@@ -18,22 +19,24 @@ builds:
       - arm64
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    builds:
-      - linux
-      - darwin
 
 checksum:
   name_template: 'checksums.txt'
 
-brews:
+homebrew_casks:
   - name: canary-gate
     homepage: "https://github.com/KongZ/canary-gate"
     description: "A Canary-Gate CLI tool for managing canary deployments."
     license: "Apache-2.0"
-    install: |
-      bin.install "canary-gate"
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/canary-gate"]
+          end
     repository:
       owner: "KongZ"
       name: "homebrew-tap"
