@@ -1,0 +1,40 @@
+# .goreleaser.yml
+
+project_name: canary-gate
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - id: canary-gate
+    # Statically compiled binary
+    env:
+      - CGO_ENABLED=0
+    main: ./cli/main
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds:
+      - linux
+      - darwin
+
+checksum:
+  name_template: 'checksums.txt'
+
+brews:
+  - name: canary-gate
+    homepage: "https://github.com/KongZ/canary-gate"
+    description: "A Canary-Gate CLI tool for managing canary deployments."
+    license: "Apache-2.0"
+    install: |
+      bin.install "canary-gate"
+    repository:
+      owner: "KongZ"
+      name: "homebrew-tap"
+      token: "{{ .Env.GITHUB_TOKEN }}"

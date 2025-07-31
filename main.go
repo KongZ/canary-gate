@@ -17,6 +17,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -126,7 +127,12 @@ func main() {
 	}
 	ctx := ctrl.SetupSignalHandler()
 	if err := cmd.Run(ctx, os.Args); err != nil {
-		log.Fatal().Msgf("Error: %s", err)
+		if errors.Is(err, http.ErrServerClosed) {
+			log.Info().Msg("Server closed gracefully")
+			return
+		} else {
+			log.Fatal().Msgf("Error: %s", err)
+		}
 	}
 }
 
