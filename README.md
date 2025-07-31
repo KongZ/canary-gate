@@ -180,8 +180,15 @@ Use can the command-line tool to open/close gates.
 
 ## CLI Installation
 
-<!-- TODO brew -->
-<!-- TODO binary download -->
+### Homebrew (macOS and Linux)
+
+If you use [Homebrew](https://brew.sh/) you can install by these command
+
+```bash
+brew tap KongZ/homebrew-tap
+brew install canary-gate
+```
+
 ### Downloading CLI Binary Files
 
 You can download the binary files from [releases](https://github.com/KongZ/canary-gate/releases).
