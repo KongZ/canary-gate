@@ -27,6 +27,7 @@ builds:
     goarch:
       - amd64
       - arm64
+
   - <<: *build
     id: windows
     goos:
@@ -36,12 +37,14 @@ archives:
   - formats:
       - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    id: linux_darwin
     ids:
       - linux
       - darwin
   - formats:
       - zip
     name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    id: windows
     ids: 
       - windows
 
