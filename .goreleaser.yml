@@ -6,22 +6,44 @@ before:
   hooks:
     - go mod tidy
 builds:
-  - id: canary-gate
-    # Statically compiled binary
-    env:
-      - CGO_ENABLED=0
-    main: ./cli/
+  - <<: &build
+      binary: canary-gate
+      main: ./cli/
+      ldflags:
+        - -s -w -X main.VERSION={{ .Version }}
+      env:
+        - CGO_ENABLED=0
+    id: linux
     goos:
       - linux
+    goarch:
+      - amd64
+      - arm64
+
+  - <<: *build
+    id: darwin
+    goos:
       - darwin
     goarch:
       - amd64
       - arm64
+  - <<: *build
+    id: windows
+    goos:
+      - windows
 
 archives:
   - formats:
       - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    ids:
+      - linux
+      - darwin
+  - formats:
+      - zip
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    ids: 
+      - windows
 
 checksum:
   name_template: 'checksums.txt'
