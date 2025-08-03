@@ -1,6 +1,6 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Build](https://github.com/KongZ/canary-gate/actions/workflows/pull_request.yml/badge.svg)](https://github.com/KongZ/canary-gate/actions/workflows/pull_request.yml)
-[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/canary-gate)](https://artifacthub.io/packages/search?repo=canary-gate)
+[![Build and Test](https://github.com/KongZ/canary-gate/actions/workflows/code_build.yml/badge.svg)](https://github.com/KongZ/canary-gate/actions/workflows/code_build.yml)
+
 
 <img src="https://raw.githubusercontent.com/KongZ/canary-gate/main/docs/gopher-canary-gate.png" alt="Canary Gate logo" width="200"/>
 
@@ -290,3 +290,6 @@ Licensed under the Apache License, Version 2.0 (the "License"); you may not use 
 <http://www.apache.org/licenses/LICENSE-2.0/>
 
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+The original [Go gopher](https://go.dev/wiki/Gopher) was designed by Renee French.
+The design is licensed under the Creative Commons 4.0 Attributions license.
