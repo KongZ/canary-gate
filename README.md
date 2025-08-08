@@ -59,29 +59,29 @@ Flagger will provide the [webhook](https://docs.flagger.app/usage/webhooks) for 
 
 Each gate controls the flow of the Flagger Canary process.
 
-1. When a new version is detected, it will check the <confirm-rollout> gate.
+1. When a new version is detected, it will check the `<confirm-rollout>` gate.
    - If the gate is open, it will proceed to the next stage.
    - If the gate is closed, it will halt the process and wait until the gate is opened.
 
-2. Next, it will check the <pre-rollout> gate. This stage is not depicted in the diagram.
+2. Next, it will check the `<pre-rollout>` gate. This stage is not depicted in the diagram.
    - If the gate is open, it will proceed to the next stage.
    - If the gate is closed, it will halt the process and wait until the gate is opened.
 
-3. Flagger will begin increasing traffic based on the configuration in CanaryGate. Before each traffic increase, it will check the <rollout> and <confirm-traffic-increase> gates.
-   - If <rollout> is open, it will proceed to the next stage.
-   - If <rollout> is closed, it will halt the process and continue monitoring metrics. If metrics indicate failure, it will initiate a rollback.
-   - If <confirm-traffic-increase> is open, it will continue to increase traffic and proceed to the next stage.
-   - If <confirm-traffic-increase> is closed, it will halt the process.
+3. Flagger will begin increasing traffic based on the configuration in CanaryGate. Before each traffic increase, it will check the `<rollout>` and `<confirm-traffic-increase>` gates.
+   - If `<rollout>` is open, it will proceed to the next stage.
+   - If `<rollout>` is closed, it will halt the process and continue monitoring metrics. If metrics indicate failure, it will initiate a rollback.
+   - If `<confirm-traffic-increase>` is open, it will continue to increase traffic and proceed to the next stage.
+   - If `<confirm-traffic-increase>` is closed, it will halt the process.
 
-4. After increasing traffic until it reaches the maximum weight, it will check the <confirm-promotion> gate.
+4. After increasing traffic until it reaches the maximum weight, it will check the `<confirm-promotion>` gate.
    - If the gate is open, it will proceed to promote to the new version.
    - If the gate is closed, it will halt the process and continue monitoring metrics. If metrics indicate failure, it will initiate a rollback.
 
-5. Flagger will copy the canary deployment specification template over to the primary. After promotion is finalized, the <post-rollout> gate is checked. This stage is not depicted in the diagram.
+5. Flagger will copy the canary deployment specification template over to the primary. After promotion is finalized, the `<post-rollout>` gate is checked. This stage is not depicted in the diagram.
    - If the gate is open, the process is completed.
    - If the gate is closed, the process is pending finalization.
 
-6. The <rollback> gate is continuously monitored throughout the process.
+6. The `<rollback>` gate is continuously monitored throughout the process.
    - If the gate is open, the rollback process is initiated.
    - If the gate is closed, the rollout process continues.
 
